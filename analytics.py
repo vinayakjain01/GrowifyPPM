@@ -158,7 +158,8 @@ def run_overall_view(
         # Take the most common variant title per product
         shopify["_variant"] = shopify[shop_var_col].astype(str).str.strip()
         for pid, grp in shopify.groupby("_pid"):
-            variant_map[pid] = grp["_variant"].mode().iloc[0] if not grp.empty else ""
+            _mode = grp["_variant"].mode()
+            variant_map[pid] = _mode.iloc[0] if not _mode.empty else ""
 
     # ── Aggregate ────────────────────────────────────────────────────
     meta_agg_cols = ["_spend", "_lpv", "_ctr", "_cpm"]
