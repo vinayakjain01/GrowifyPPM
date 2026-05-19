@@ -131,6 +131,464 @@ def _fmt_val(v, fmt: str) -> str:
 #  SECTION 0 — OVERALL VIEW
 # ══════════════════════════════════════════════════════════════════════
 
+# def render_overall_view():
+#     page_header("Overall View",
+#                 "Merge Meta, Shopify & Google exports into one unified performance table",
+#                 "🌐")
+
+#     section_header("Upload Raw Exports",
+#                    "Drop your unmodified platform exports below", "#2563EB")
+#     cleaned = render_upload_panel("ov", show_google=True, google_optional=True)
+
+#     st.markdown("<div style='margin:12px 0'></div>", unsafe_allow_html=True)
+#     btn_col, _ = st.columns([2, 5])
+#     with btn_col:
+#         run_ov = st.button("▶  Merge & Analyse", type="primary",
+#                            key="btn_run_ov", use_container_width=True)
+
+#     if run_ov:
+#         if not cleaned["ready"]:
+#             st.error("Please upload at least Meta and Shopify files before running.")
+#             return
+#         with st.spinner("Merging data sources…"):
+#             try:
+#                 merged_df, has_month = run_overall_view(
+#                     cleaned["meta_df"],
+#                     cleaned["shopify_df"],
+#                     cleaned["google_df"],
+#                 )
+#                 st.session_state["ov_data"]       = merged_df
+#                 st.session_state["ov_has_month"]  = has_month
+#                 st.session_state["ov_has_google"] = cleaned["google_df"] is not None
+#             except Exception as e:
+#                 st.error(f"Error: {e}")
+#                 st.exception(e)
+#                 return
+
+#     if "ov_data" not in st.session_state:
+#         if cleaned["ready"]:
+#             render_clean_preview(cleaned)
+#         else:
+#             st.markdown(
+#                 '<div class="th-empty" style="margin-top:16px">'
+#                 '<div style="font-size:24px;margin-bottom:8px">📁</div>'
+#                 '<div style="font-size:14px;font-weight:600;color:#1E40AF;margin-bottom:4px">'
+#                 'Upload your data files to get started</div>'
+#                 '<div class="th-text-muted" style="font-size:12px">'
+#                 'Meta + Shopify required · Google is optional</div>'
+#                 '</div>',
+#                 unsafe_allow_html=True,
+#             )
+#         return
+
+#     render_clean_preview(cleaned)
+#     df         = st.session_state["ov_data"].copy()
+#     has_month  = st.session_state["ov_has_month"]
+#     has_google = st.session_state.get("ov_has_google", False)
+
+#     # ── KPIs ─────────────────────────────────────────────────────────
+#     total_meta   = df["Meta Spend"].sum()      if "Meta Spend"      in df.columns else 0
+#     total_google = df["Google Cost"].sum()     if "Google Cost"     in df.columns else 0
+#     total_spend  = df["Total Spend"].sum()     if "Total Spend"     in df.columns else 0
+#     total_rev    = df["Shopify Revenue"].sum() if "Shopify Revenue" in df.columns else 0
+#     overall_roi  = total_rev / total_spend if total_spend else 0
+
+#     divider()
+#     kpi_row([
+#         ("Total Products", f"{df['Product ID'].nunique():,}", "#0F172A", "#F8FAFC"),
+#         ("Meta Spend",     compact_currency(total_meta),      "#2563EB", "#EFF6FF"),
+#         ("Google Cost",    compact_currency(total_google),    "#D97706", "#FFF7ED"),
+#         ("Total Spend",    compact_currency(total_spend),     "#7C3AED", "#F5F3FF"),
+#         ("Revenue",        compact_currency(total_rev),       "#059669", "#ECFDF5"),
+#         ("Overall ROI",    f"{overall_roi:.2f}x",
+#          "#059669" if overall_roi >= 1 else "#DC2626",
+#          "#ECFDF5" if overall_roi >= 1 else "#FEF2F2"),
+#     ])
+#     divider()
+
+#     # ── Column selector ───────────────────────────────────────────────
+#     section_header("Columns & Filters",
+#                    "Select metrics to display — filters appear automatically", "#2563EB")
+
+#     available_cols = [c for c in _OV_COLS if c in df.columns]
+#     if not has_month and "Month" in available_cols:
+#         available_cols.remove("Month")
+#     if not has_google:
+#         available_cols = [c for c in available_cols if c not in ("Google Cost","Conversions")]
+
+#     default_sel = [
+#         c for c in ["Meta Spend","Google Cost","Total Spend","Shopify Revenue",
+#                     "ROI","Net Items Sold","CTR","CPM","Variant Title"]
+#         if c in available_cols
+#     ]
+
+#     col_options = list(available_cols)
+#     col_labels  = [
+#         f"{_OV_COLS.get(c,{}).get('label',c)}  [{_OV_COLS.get(c,{}).get('source','?')}]"
+#         for c in col_options
+#     ]
+#     label_to_key = {lbl: key for key, lbl in zip(col_options, col_labels)}
+
+#     selected_labels = st.multiselect(
+#         "Columns",
+#         options=col_labels,
+#         default=[col_labels[col_options.index(c)] for c in default_sel if c in col_options],
+#         label_visibility="collapsed",
+#         key="ov_col_sel",
+#         placeholder="Choose metrics to display…",
+#     )
+#     selected_cols = [label_to_key[lbl] for lbl in selected_labels]
+
+#     if not selected_cols:
+#         st.info("Select at least one metric above to begin filtering.")
+#         return
+
+#     # ── Quick search + period row ─────────────────────────────────────
+#     srch_a, srch_b, srch_c = st.columns([3, 3, 2])
+#     with srch_a:
+#         st.markdown(
+#             '<div class="th-filter-label" style="font-size:11px;font-weight:600;'
+#             'margin-bottom:4px">🔎 Product Search</div>',
+#             unsafe_allow_html=True,
+#         )
+#         search_text = st.text_input(
+#             "Search", placeholder="Product title or ID…",
+#             label_visibility="collapsed", key="ov_search",
+#         )
+
+#     with srch_b:
+#         if "Variant Title" in selected_cols and "Variant Title" in df.columns:
+#             st.markdown(
+#                 '<div class="th-filter-label" style="font-size:11px;font-weight:600;'
+#                 'margin-bottom:4px">🏷 Variant Search</div>',
+#                 unsafe_allow_html=True,
+#             )
+#             variant_search = st.text_input(
+#                 "Variant", placeholder="e.g. XL, M, Blue…",
+#                 label_visibility="collapsed", key="ov_variant_search",
+#             )
+#         else:
+#             variant_search = ""
+
+#     with srch_c:
+#         st.markdown(
+#             '<div class="th-filter-label" style="font-size:11px;font-weight:600;'
+#             'margin-bottom:4px">📅 Period</div>',
+#             unsafe_allow_html=True,
+#         )
+#         if has_month and "Month" in df.columns:
+#             months_avail  = sorted(df["Month"].dropna().unique().tolist())
+#             period_options = ["All Months", "Last 7 Days"] + months_avail
+#             sel_period = st.selectbox("Period", period_options,
+#                                       label_visibility="collapsed", key="ov_period")
+#             if sel_period == "All Months":
+#                 sel_months = months_avail; _last7 = False
+#             elif sel_period == "Last 7 Days":
+#                 sel_months = months_avail; _last7 = True
+#             else:
+#                 sel_months = [sel_period]; _last7 = False
+#         else:
+#             sel_months = None; _last7 = False
+
+#     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+#     # ── Metric filters (inside expander) ─────────────────────────────
+#     filter_specs = {}
+#     num_fmts = ("currency", "int", "roi", "pct")
+#     num_cols  = [c for c in selected_cols if _OV_COLS.get(c, {}).get("fmt") in num_fmts]
+#     text_cols = [c for c in selected_cols
+#                  if _OV_COLS.get(c, {}).get("fmt") == "text"
+#                  and c not in ("Month", "Variant Title")]
+
+#     with st.expander("⚙️  Metric Filters", expanded=False):
+#         if num_cols:
+#             st.markdown(
+#                 '<div class="th-text-faint" style="font-size:11px;margin-bottom:12px">'
+#                 'Set a condition for each metric — only matching rows will be shown.'
+#                 '</div>',
+#                 unsafe_allow_html=True,
+#             )
+#             for i in range(0, len(num_cols), 3):
+#                 chunk    = num_cols[i:i+3]
+#                 row_cols = st.columns(len(chunk))
+#                 for rc, col_key in zip(row_cols, chunk):
+#                     mi      = _OV_COLS[col_key]
+#                     col_min = float(df[col_key].min()) if col_key in df.columns else 0.0
+#                     col_max = float(df[col_key].max()) if col_key in df.columns else 100.0
+#                     fmt_str = ("%.4f" if mi["fmt"] == "pct"
+#                                else "%.2f" if mi["fmt"] == "roi" else "%.0f")
+#                     step    = (0.0001 if mi["fmt"] == "pct"
+#                                else 0.01 if mi["fmt"] == "roi" else 1.0)
+#                     with rc:
+#                         # filter cell — uses CSS class, no hardcoded bg
+#                         st.markdown(
+#                             f'<div class="th-filter-cell">'
+#                             f'<div class="th-filter-metric-title" style="color:{mi["color"]}">'
+#                             f'{mi["label"]}</div>',
+#                             unsafe_allow_html=True,
+#                         )
+#                         op_col, val_col = st.columns([1, 2])
+#                         with op_col:
+#                             st.markdown(
+#                                 '<div class="th-filter-label">Operator</div>',
+#                                 unsafe_allow_html=True,
+#                             )
+#                             operator = st.selectbox(
+#                                 f"op_{col_key}", options=["—",">","<","="],
+#                                 label_visibility="collapsed", key=f"ov_op_{col_key}",
+#                             )
+#                         with val_col:
+#                             st.markdown(
+#                                 '<div class="th-filter-label">Value</div>',
+#                                 unsafe_allow_html=True,
+#                             )
+#                             filter_val = st.number_input(
+#                                 f"val_{col_key}", value=col_min,
+#                                 step=step, format=fmt_str,
+#                                 label_visibility="collapsed", key=f"ov_val_{col_key}",
+#                             )
+#                         st.markdown("</div>", unsafe_allow_html=True)
+
+#                         if operator != "—":
+#                             filter_specs[col_key] = (operator, filter_val)
+
+#         if text_cols:
+#             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+#             for col_key in text_cols:
+#                 mi   = _OV_COLS[col_key]
+#                 uniq = sorted(df[col_key].dropna().unique().tolist()) if col_key in df.columns else []
+#                 if uniq:
+#                     st.markdown(
+#                         f'<div style="font-size:11px;font-weight:600;color:{mi["color"]};'
+#                         f'margin-bottom:3px">{mi["label"]}</div>',
+#                         unsafe_allow_html=True,
+#                     )
+#                     sel_vals = st.multiselect(f"filter_{col_key}", uniq, default=uniq,
+#                                               label_visibility="collapsed", key=f"ov_txt_{col_key}")
+#                     filter_specs[col_key] = ("text", sel_vals)
+
+#         if not num_cols and not text_cols:
+#             st.markdown(
+#                 '<div class="th-text-faint" style="font-size:12px;text-align:center;'
+#                 'padding:12px">Select metric columns above to see filters here.</div>',
+#                 unsafe_allow_html=True,
+#             )
+
+#         _, rst_col = st.columns([6, 1])
+#         with rst_col:
+#             if st.button("↺ Reset", key="ov_reset"):
+#                 keys_to_del = ["ov_search","ov_period","ov_col_sel","ov_variant_search"]
+#                 for c in available_cols:
+#                     keys_to_del += [f"ov_op_{c}", f"ov_val_{c}", f"ov_txt_{c}"]
+#                 for k in keys_to_del:
+#                     if k in st.session_state:
+#                         del st.session_state[k]
+#                 st.rerun()
+
+#     # ── Apply filters ─────────────────────────────────────────────────
+#     fdf = df.copy()
+
+#     if search_text.strip():
+#         q = search_text.strip().lower()
+#         fdf = fdf[
+#             fdf["Product Title"].str.lower().str.contains(q, na=False) |
+#             fdf["Product ID"].astype(str).str.lower().str.contains(q, na=False)
+#         ]
+#     if has_month and sel_months and "Month" in fdf.columns:
+#         fdf = fdf[fdf["Month"].isin(sel_months)]
+#     if variant_search.strip() and "Variant Title" in fdf.columns:
+#         fdf = fdf[fdf["Variant Title"].str.lower()
+#                   .str.contains(variant_search.strip().lower(), na=False)]
+#     if _last7 and "Month" in fdf.columns:
+#         today  = datetime.date.today()
+#         cutoff = today - datetime.timedelta(days=7)
+#         def _month_in_last7(m):
+#             try:
+#                 p = parse_month_start(m)
+#                 if p is None: return False
+#                 if hasattr(p, "date"): p = p.date()
+#                 return p >= cutoff
+#             except Exception:
+#                 return False
+#         fdf = fdf[fdf["Month"].apply(_month_in_last7)]
+
+#     for col_key, spec in filter_specs.items():
+#         if col_key not in fdf.columns:
+#             continue
+#         if spec[0] == "text":
+#             _, sel_vals = spec
+#             if sel_vals:
+#                 fdf = fdf[fdf[col_key].isin(sel_vals)]
+#         else:
+#             op, fv = spec
+#             if op == ">": fdf = fdf[fdf[col_key] > fv]
+#             elif op == "<": fdf = fdf[fdf[col_key] < fv]
+#             elif op == "=": fdf = fdf[fdf[col_key] == fv]
+
+#     # ── Result strip ──────────────────────────────────────────────────
+#     n_shown     = len(fdf)
+#     n_total     = len(df)
+#     is_filtered = n_shown < n_total
+
+#     badge_color = "#2563EB" if not is_filtered else "#059669"
+#     filter_badge = (
+#         '<span style="background:#DBEAFE;border-radius:6px;padding:3px 10px;'
+#         'font-size:11px;color:#1E40AF;font-weight:600">Filters active</span>'
+#         if is_filtered else ""
+#     )
+#     st.markdown(
+#         f'<div style="display:flex;align-items:center;gap:10px;margin:12px 0 8px">'
+#         f'<span style="background:{badge_color};color:white;border-radius:6px;'
+#         f'padding:3px 10px;font-size:12px;font-weight:700">{n_shown:,} rows</span>'
+#         f'<span class="th-text-faint" style="font-size:12px">'
+#         f'{"showing all products" if not is_filtered else f"filtered from {n_total:,} total"}'
+#         f'</span>'
+#         f'{filter_badge}'
+#         f'</div>',
+#         unsafe_allow_html=True,
+#     )
+
+#     # Filtered summary KPIs
+#     if is_filtered and not fdf.empty:
+#         kpi_items = []
+#         for col_key in selected_cols:
+#             mi = _OV_COLS.get(col_key, {})
+#             if mi.get("fmt") in ("currency","int") and col_key in fdf.columns:
+#                 kpi_items.append((mi["label"], _fmt_val(fdf[col_key].sum(), mi["fmt"]),
+#                                   mi["color"], mi["bg"]))
+#             elif mi.get("fmt") == "roi" and col_key in fdf.columns:
+#                 sp  = fdf["Total Spend"].sum()      if "Total Spend"     in fdf.columns else 0
+#                 rv  = fdf["Shopify Revenue"].sum()  if "Shopify Revenue" in fdf.columns else 0
+#                 roi_v = rv / sp if sp else 0
+#                 kpi_items.append(("Filtered ROI", f"{roi_v:.2f}x",
+#                                   "#059669" if roi_v >= 1 else "#DC2626",
+#                                   "#ECFDF5" if roi_v >= 1 else "#FEF2F2"))
+#         if kpi_items:
+#             kpi_row(kpi_items[:6])
+#             st.markdown("<div style='margin:10px 0'></div>", unsafe_allow_html=True)
+
+#     if fdf.empty:
+#         st.markdown(
+#             '<div class="th-empty">'
+#             '<div style="font-size:28px;margin-bottom:8px">🔍</div>'
+#             '<div style="font-size:14px;font-weight:600;color:#DC2626;margin-bottom:4px">'
+#             'No results found</div>'
+#             '<div class="th-text-faint" style="font-size:12px">'
+#             'Try adjusting your filters above</div>'
+#             '</div>',
+#             unsafe_allow_html=True,
+#         )
+#         return
+
+#     # ── Build display table ───────────────────────────────────────────
+#     always_cols = ["Product ID", "Product Title"]
+#     if "Variant Title" in fdf.columns:
+#         always_cols.append("Variant Title")
+#     if has_month and "Month" in selected_cols and "Month" in fdf.columns:
+#         always_cols.append("Month")
+
+#     disp = fdf[[c for c in always_cols if c in fdf.columns]].copy()
+#     display_col_map: dict = {}
+
+#     for col_key in selected_cols:
+#         if col_key in always_cols or col_key not in fdf.columns:
+#             continue
+#         mi       = _OV_COLS.get(col_key, {})
+#         disp_lbl = mi.get("label", col_key)
+#         disp[disp_lbl] = fdf[col_key].apply(lambda v: _fmt_val(v, mi.get("fmt","text")))
+#         display_col_map[disp_lbl] = col_key
+
+#     disp_cols_data = [c for c in always_cols if c in disp.columns] + list(display_col_map.keys())
+
+#     # Totals
+#     totals_row = {c: ("∑ TOTAL" if c == "Product ID" else "") for c in always_cols}
+#     for disp_lbl, col_key in display_col_map.items():
+#         mi  = _OV_COLS.get(col_key, {})
+#         fmt = mi.get("fmt","text")
+#         if fmt in ("currency","int") and col_key in fdf.columns:
+#             totals_row[disp_lbl] = _fmt_val(fdf[col_key].sum(), fmt)
+#         elif fmt == "roi":
+#             sp = fdf["Total Spend"].sum()     if "Total Spend"     in fdf.columns else 0
+#             rv = fdf["Shopify Revenue"].sum() if "Shopify Revenue" in fdf.columns else 0
+#             totals_row[disp_lbl] = f"{rv/sp:.2f}x" if sp else "—"
+#         else:
+#             totals_row[disp_lbl] = ""
+
+#     # Totals pills — accent colours still accent, background is from column definition
+#     totals_html = ""
+#     for disp_lbl, col_key in display_col_map.items():
+#         mi  = _OV_COLS.get(col_key, {})
+#         val = totals_row.get(disp_lbl, "")
+#         if val and val != "":
+#             totals_html += (
+#                 f'<span style="display:inline-flex;align-items:center;gap:4px;'
+#                 f'background:{mi["bg"]};border:1px solid {mi["color"]}22;'
+#                 f'border-radius:6px;padding:4px 10px;font-size:11px;margin:2px;'
+#                 f'color:{mi["color"]};font-weight:700">'
+#                 f'{disp_lbl}: {val}</span>'
+#             )
+
+#     if totals_html:
+#         # Uses .th-totals-bar which maps to var(--surface-totals) — light/dark safe
+#         st.markdown(
+#             f'<div class="th-totals-bar">'
+#             f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
+#             f'letter-spacing:.1em;margin-bottom:6px;" class="th-text-faint">'
+#             f'∑ Totals · {n_shown:,} rows</div>'
+#             f'<div style="display:flex;flex-wrap:wrap;gap:4px">{totals_html}</div>'
+#             f'</div>',
+#             unsafe_allow_html=True,
+#         )
+
+#     st.dataframe(
+#         disp[disp_cols_data].reset_index(drop=True),
+#         use_container_width=True,
+#         hide_index=True,
+#         height=500,
+#     )
+
+#     # Grand totals dark bar — intentionally always dark (brand style), just like the sidebar
+#     st.markdown(
+#         f'<div class="th-grand-bar">'
+#         f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
+#         f'letter-spacing:.1em;margin-bottom:8px;" class="th-text-grandtot">'
+#         f'∑ Grand Totals — {n_shown:,} products</div>'
+#         f'<div style="display:flex;flex-wrap:wrap;gap:6px">{totals_html}</div>'
+#         f'</div>',
+#         unsafe_allow_html=True,
+#     )
+
+#     # ── Download ──────────────────────────────────────────────────────
+#     dl1, dl2 = st.columns([2, 4])
+#     with dl1:
+#         export_cols = ["Product ID","Product Title"]
+#         if has_month and "Month" in df.columns:
+#             export_cols.append("Month")
+#         for col_key in selected_cols:
+#             if col_key not in export_cols and col_key in fdf.columns:
+#                 export_cols.append(col_key)
+#         csv_buf = fdf[export_cols].to_csv(index=False).encode("utf-8")
+#         st.download_button(
+#             label="⬇  Download CSV",
+#             data=csv_buf,
+#             file_name="overall_view_filtered.csv",
+#             mime="text/csv",
+#             type="primary",
+#             use_container_width=True,
+#         )
+#     with dl2:
+#         col_names = ", ".join([_OV_COLS.get(c, {}).get("label", c) for c in selected_cols])
+#         st.markdown(
+#             f'<div class="th-card-muted" style="padding:10px 14px;height:100%;'
+#             f'display:flex;align-items:center;">'
+#             f'<span class="th-text-muted" style="font-size:12px">'
+#             f'Exporting <strong class="th-text-primary">{n_shown:,} rows</strong>'
+#             f' with <strong class="th-text-primary">{len(selected_cols)} columns</strong>'
+#             f'</span></div>',
+#             unsafe_allow_html=True,
+#         )
+
+
 def render_overall_view():
     page_header("Overall View",
                 "Merge Meta, Shopify & Google exports into one unified performance table",
@@ -186,39 +644,138 @@ def render_overall_view():
     has_month  = st.session_state["ov_has_month"]
     has_google = st.session_state.get("ov_has_google", False)
 
-    # ── KPIs ─────────────────────────────────────────────────────────
-    total_meta   = df["Meta Spend"].sum()      if "Meta Spend"      in df.columns else 0
-    total_google = df["Google Cost"].sum()     if "Google Cost"     in df.columns else 0
-    total_spend  = df["Total Spend"].sum()     if "Total Spend"     in df.columns else 0
-    total_rev    = df["Shopify Revenue"].sum() if "Shopify Revenue" in df.columns else 0
+    # ─────────────────────────────────────────────────────────────────
+    # PERIOD SELECTOR  (placed early so dynamic KPIs can use it)
+    # ─────────────────────────────────────────────────────────────────
+    if has_month and "Month" in df.columns:
+        months_avail  = sorted(df["Month"].dropna().unique().tolist())
+        period_options = ["All Months"] + months_avail
+        sel_period = st.selectbox(
+            "📅  Period",
+            period_options,
+            key="ov_period",
+            label_visibility="visible",
+        )
+        if sel_period == "All Months":
+            sel_months = months_avail
+            _all_months_selected = True
+        else:
+            sel_months = [sel_period]
+            _all_months_selected = False
+    else:
+        sel_months = None
+        _all_months_selected = True  # no month col → already flat
+
+    # ── FIX 2: Dynamic top KPIs — filtered by month only ─────────────
+    #    kpi_df is the raw (pre-aggregation) data filtered only by month.
+    if has_month and sel_months and "Month" in df.columns:
+        kpi_df = df[df["Month"].isin(sel_months)]
+    else:
+        kpi_df = df
+
+    total_meta   = kpi_df["Meta Spend"].sum()      if "Meta Spend"      in kpi_df.columns else 0
+    total_google = kpi_df["Google Cost"].sum()     if "Google Cost"     in kpi_df.columns else 0
+    total_spend  = kpi_df["Total Spend"].sum()     if "Total Spend"     in kpi_df.columns else 0
+    total_rev    = kpi_df["Shopify Revenue"].sum() if "Shopify Revenue" in kpi_df.columns else 0
     overall_roi  = total_rev / total_spend if total_spend else 0
+    # Product count: unique product IDs in the month-filtered slice
+    n_products   = kpi_df["Product ID"].nunique()
+
+    # Period label for the KPI header
+    period_label = sel_period if (has_month and "Month" in df.columns) else "All Time"
 
     divider()
+    # Small label above the KPI row showing which period they reflect
+    st.markdown(
+        f'<div style="font-size:10px;font-weight:700;color:var(--text-faint);'
+        f'text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">'
+        f'📊 KPIs — {period_label}</div>',
+        unsafe_allow_html=True,
+    )
     kpi_row([
-        ("Total Products", f"{df['Product ID'].nunique():,}", "#0F172A", "#F8FAFC"),
-        ("Meta Spend",     compact_currency(total_meta),      "#2563EB", "#EFF6FF"),
-        ("Google Cost",    compact_currency(total_google),    "#D97706", "#FFF7ED"),
-        ("Total Spend",    compact_currency(total_spend),     "#7C3AED", "#F5F3FF"),
-        ("Revenue",        compact_currency(total_rev),       "#059669", "#ECFDF5"),
+        ("Total Products", f"{n_products:,}",            "#0F172A", "#F8FAFC"),
+        ("Meta Spend",     compact_currency(total_meta),  "#2563EB", "#EFF6FF"),
+        ("Google Cost",    compact_currency(total_google),"#D97706", "#FFF7ED"),
+        ("Total Spend",    compact_currency(total_spend), "#7C3AED", "#F5F3FF"),
+        ("Revenue",        compact_currency(total_rev),   "#059669", "#ECFDF5"),
         ("Overall ROI",    f"{overall_roi:.2f}x",
          "#059669" if overall_roi >= 1 else "#DC2626",
          "#ECFDF5" if overall_roi >= 1 else "#FEF2F2"),
     ])
     divider()
 
-    # ── Column selector ───────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────
+    # FIX 1: Build the WORKING dataframe for the table.
+    # When "All Months" is selected → aggregate (sum) across months
+    # so each product appears exactly once with combined totals.
+    # When a specific month is chosen → filter to that month (no aggregation needed,
+    # products are already 1 row per product per month after run_overall_view).
+    # ─────────────────────────────────────────────────────────────────
+
+    # Numeric columns that should be SUMMED
+    SUM_COLS = [
+        "Meta Spend", "Google Cost", "Total Spend",
+        "Shopify Revenue", "Net Items Sold", "Landing Page Views",
+        "Conversions", "CPM",
+    ]
+    # Rate columns that should be RECALCULATED (not averaged)
+    # CTR = LPV / Impressions — we can't recalculate impressions, so we
+    # take a weighted mean: sum(CTR * spend) / sum(spend), or simply mean.
+    RATE_COLS = ["CTR"]
+    # Text columns used as group keys
+    KEY_COLS = ["Product ID", "Product Title", "Variant Title"]
+
+    if _all_months_selected and has_month and "Month" in df.columns:
+        # Aggregate: collapse all months per product
+        agg_dict = {}
+        for c in SUM_COLS:
+            if c in df.columns:
+                agg_dict[c] = "sum"
+        for c in RATE_COLS:
+            if c in df.columns:
+                agg_dict[c] = "mean"
+        for c in ["Variant Title"]:
+            if c in df.columns:
+                agg_dict[c] = "first"
+
+        group_keys = [k for k in ["Product ID", "Product Title"] if k in df.columns]
+        if agg_dict:
+            work_df = df.groupby(group_keys, as_index=False).agg(agg_dict)
+        else:
+            work_df = df.groupby(group_keys, as_index=False).first()
+
+        # Recalculate ROI from aggregated spend/revenue
+        if "Total Spend" in work_df.columns and "Shopify Revenue" in work_df.columns:
+            work_df["ROI"] = (
+                work_df["Shopify Revenue"] /
+                work_df["Total Spend"].replace(0, float("nan"))
+            ).fillna(0).round(4)
+        elif "ROI" in df.columns:
+            work_df["ROI"] = df.groupby(group_keys)["ROI"].mean().values
+
+    else:
+        # Specific month selected: just filter, no aggregation needed
+        if has_month and sel_months and "Month" in df.columns:
+            work_df = df[df["Month"].isin(sel_months)].copy()
+        else:
+            work_df = df.copy()
+
+    # ─────────────────────────────────────────────────────────────────
+    # COLUMN SELECTOR
+    # ─────────────────────────────────────────────────────────────────
     section_header("Columns & Filters",
                    "Select metrics to display — filters appear automatically", "#2563EB")
 
-    available_cols = [c for c in _OV_COLS if c in df.columns]
-    if not has_month and "Month" in available_cols:
+    available_cols = [c for c in _OV_COLS if c in work_df.columns]
+    # Remove Month col when aggregated (it no longer makes sense per-row)
+    if _all_months_selected and "Month" in available_cols:
         available_cols.remove("Month")
     if not has_google:
-        available_cols = [c for c in available_cols if c not in ("Google Cost","Conversions")]
+        available_cols = [c for c in available_cols if c not in ("Google Cost", "Conversions")]
 
     default_sel = [
-        c for c in ["Meta Spend","Google Cost","Total Spend","Shopify Revenue",
-                    "ROI","Net Items Sold","CTR","CPM","Variant Title"]
+        c for c in ["Meta Spend", "Google Cost", "Total Spend", "Shopify Revenue",
+                    "ROI", "Net Items Sold", "CTR", "CPM", "Variant Title"]
         if c in available_cols
     ]
 
@@ -243,8 +800,11 @@ def render_overall_view():
         st.info("Select at least one metric above to begin filtering.")
         return
 
-    # ── Quick search + period row ─────────────────────────────────────
-    srch_a, srch_b, srch_c = st.columns([3, 3, 2])
+    # ─────────────────────────────────────────────────────────────────
+    # SEARCH INPUTS  (text search + variant search)
+    # Period selector is already rendered above the KPIs.
+    # ─────────────────────────────────────────────────────────────────
+    srch_a, srch_b = st.columns([3, 3])
     with srch_a:
         st.markdown(
             '<div class="th-filter-label" style="font-size:11px;font-weight:600;'
@@ -255,9 +815,8 @@ def render_overall_view():
             "Search", placeholder="Product title or ID…",
             label_visibility="collapsed", key="ov_search",
         )
-
     with srch_b:
-        if "Variant Title" in selected_cols and "Variant Title" in df.columns:
+        if "Variant Title" in selected_cols and "Variant Title" in work_df.columns:
             st.markdown(
                 '<div class="th-filter-label" style="font-size:11px;font-weight:600;'
                 'margin-bottom:4px">🏷 Variant Search</div>',
@@ -270,35 +829,27 @@ def render_overall_view():
         else:
             variant_search = ""
 
-    with srch_c:
-        st.markdown(
-            '<div class="th-filter-label" style="font-size:11px;font-weight:600;'
-            'margin-bottom:4px">📅 Period</div>',
-            unsafe_allow_html=True,
-        )
-        if has_month and "Month" in df.columns:
-            months_avail  = sorted(df["Month"].dropna().unique().tolist())
-            period_options = ["All Months", "Last 7 Days"] + months_avail
-            sel_period = st.selectbox("Period", period_options,
-                                      label_visibility="collapsed", key="ov_period")
-            if sel_period == "All Months":
-                sel_months = months_avail; _last7 = False
-            elif sel_period == "Last 7 Days":
-                sel_months = months_avail; _last7 = True
-            else:
-                sel_months = [sel_period]; _last7 = False
-        else:
-            sel_months = None; _last7 = False
-
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    # ── Metric filters (inside expander) ─────────────────────────────
+    # ─────────────────────────────────────────────────────────────────
+    # FIX 3: METRIC FILTERS with human-readable operator labels
+    # ─────────────────────────────────────────────────────────────────
     filter_specs = {}
     num_fmts = ("currency", "int", "roi", "pct")
     num_cols  = [c for c in selected_cols if _OV_COLS.get(c, {}).get("fmt") in num_fmts]
     text_cols = [c for c in selected_cols
                  if _OV_COLS.get(c, {}).get("fmt") == "text"
                  and c not in ("Month", "Variant Title")]
+
+    # Human-readable operator options
+    OP_OPTIONS = ["— None", "> Greater than", "< Less than", "= Equals"]
+    # Map display label → actual operator symbol for filtering
+    OP_MAP = {
+        "— None":       None,
+        "> Greater than": ">",
+        "< Less than":    "<",
+        "= Equals":       "=",
+    }
 
     with st.expander("⚙️  Metric Filters", expanded=False):
         if num_cols:
@@ -313,29 +864,30 @@ def render_overall_view():
                 row_cols = st.columns(len(chunk))
                 for rc, col_key in zip(row_cols, chunk):
                     mi      = _OV_COLS[col_key]
-                    col_min = float(df[col_key].min()) if col_key in df.columns else 0.0
-                    col_max = float(df[col_key].max()) if col_key in df.columns else 100.0
+                    col_min = float(work_df[col_key].min()) if col_key in work_df.columns else 0.0
+                    col_max = float(work_df[col_key].max()) if col_key in work_df.columns else 100.0
                     fmt_str = ("%.4f" if mi["fmt"] == "pct"
                                else "%.2f" if mi["fmt"] == "roi" else "%.0f")
                     step    = (0.0001 if mi["fmt"] == "pct"
                                else 0.01 if mi["fmt"] == "roi" else 1.0)
                     with rc:
-                        # filter cell — uses CSS class, no hardcoded bg
                         st.markdown(
                             f'<div class="th-filter-cell">'
                             f'<div class="th-filter-metric-title" style="color:{mi["color"]}">'
                             f'{mi["label"]}</div>',
                             unsafe_allow_html=True,
                         )
-                        op_col, val_col = st.columns([1, 2])
+                        op_col, val_col = st.columns([3, 2])
                         with op_col:
                             st.markdown(
-                                '<div class="th-filter-label">Operator</div>',
+                                '<div class="th-filter-label">Condition</div>',
                                 unsafe_allow_html=True,
                             )
-                            operator = st.selectbox(
-                                f"op_{col_key}", options=["—",">","<","="],
-                                label_visibility="collapsed", key=f"ov_op_{col_key}",
+                            op_label = st.selectbox(
+                                f"op_{col_key}",
+                                options=OP_OPTIONS,
+                                label_visibility="collapsed",
+                                key=f"ov_op_{col_key}",
                             )
                         with val_col:
                             st.markdown(
@@ -343,28 +895,34 @@ def render_overall_view():
                                 unsafe_allow_html=True,
                             )
                             filter_val = st.number_input(
-                                f"val_{col_key}", value=col_min,
-                                step=step, format=fmt_str,
-                                label_visibility="collapsed", key=f"ov_val_{col_key}",
+                                f"val_{col_key}",
+                                value=col_min,
+                                step=step,
+                                format=fmt_str,
+                                label_visibility="collapsed",
+                                key=f"ov_val_{col_key}",
                             )
                         st.markdown("</div>", unsafe_allow_html=True)
 
-                        if operator != "—":
-                            filter_specs[col_key] = (operator, filter_val)
+                        op_symbol = OP_MAP.get(op_label)
+                        if op_symbol is not None:
+                            filter_specs[col_key] = (op_symbol, filter_val)
 
         if text_cols:
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
             for col_key in text_cols:
                 mi   = _OV_COLS[col_key]
-                uniq = sorted(df[col_key].dropna().unique().tolist()) if col_key in df.columns else []
+                uniq = sorted(work_df[col_key].dropna().unique().tolist()) if col_key in work_df.columns else []
                 if uniq:
                     st.markdown(
                         f'<div style="font-size:11px;font-weight:600;color:{mi["color"]};'
                         f'margin-bottom:3px">{mi["label"]}</div>',
                         unsafe_allow_html=True,
                     )
-                    sel_vals = st.multiselect(f"filter_{col_key}", uniq, default=uniq,
-                                              label_visibility="collapsed", key=f"ov_txt_{col_key}")
+                    sel_vals = st.multiselect(
+                        f"filter_{col_key}", uniq, default=uniq,
+                        label_visibility="collapsed", key=f"ov_txt_{col_key}",
+                    )
                     filter_specs[col_key] = ("text", sel_vals)
 
         if not num_cols and not text_cols:
@@ -377,7 +935,7 @@ def render_overall_view():
         _, rst_col = st.columns([6, 1])
         with rst_col:
             if st.button("↺ Reset", key="ov_reset"):
-                keys_to_del = ["ov_search","ov_period","ov_col_sel","ov_variant_search"]
+                keys_to_del = ["ov_search", "ov_period", "ov_col_sel", "ov_variant_search"]
                 for c in available_cols:
                     keys_to_del += [f"ov_op_{c}", f"ov_val_{c}", f"ov_txt_{c}"]
                 for k in keys_to_del:
@@ -385,8 +943,10 @@ def render_overall_view():
                         del st.session_state[k]
                 st.rerun()
 
-    # ── Apply filters ─────────────────────────────────────────────────
-    fdf = df.copy()
+    # ─────────────────────────────────────────────────────────────────
+    # APPLY FILTERS to work_df
+    # ─────────────────────────────────────────────────────────────────
+    fdf = work_df.copy()
 
     if search_text.strip():
         q = search_text.strip().lower()
@@ -394,23 +954,12 @@ def render_overall_view():
             fdf["Product Title"].str.lower().str.contains(q, na=False) |
             fdf["Product ID"].astype(str).str.lower().str.contains(q, na=False)
         ]
-    if has_month and sel_months and "Month" in fdf.columns:
-        fdf = fdf[fdf["Month"].isin(sel_months)]
+
     if variant_search.strip() and "Variant Title" in fdf.columns:
-        fdf = fdf[fdf["Variant Title"].str.lower()
-                  .str.contains(variant_search.strip().lower(), na=False)]
-    if _last7 and "Month" in fdf.columns:
-        today  = datetime.date.today()
-        cutoff = today - datetime.timedelta(days=7)
-        def _month_in_last7(m):
-            try:
-                p = parse_month_start(m)
-                if p is None: return False
-                if hasattr(p, "date"): p = p.date()
-                return p >= cutoff
-            except Exception:
-                return False
-        fdf = fdf[fdf["Month"].apply(_month_in_last7)]
+        fdf = fdf[
+            fdf["Variant Title"].str.lower()
+            .str.contains(variant_search.strip().lower(), na=False)
+        ]
 
     for col_key, spec in filter_specs.items():
         if col_key not in fdf.columns:
@@ -425,9 +974,11 @@ def render_overall_view():
             elif op == "<": fdf = fdf[fdf[col_key] < fv]
             elif op == "=": fdf = fdf[fdf[col_key] == fv]
 
-    # ── Result strip ──────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────
+    # RESULT STRIP
+    # ─────────────────────────────────────────────────────────────────
     n_shown     = len(fdf)
-    n_total     = len(df)
+    n_total     = len(work_df)
     is_filtered = n_shown < n_total
 
     badge_color = "#2563EB" if not is_filtered else "#059669"
@@ -448,17 +999,19 @@ def render_overall_view():
         unsafe_allow_html=True,
     )
 
-    # Filtered summary KPIs
+    # Filtered summary KPIs (below the row count badge, only when filters active)
     if is_filtered and not fdf.empty:
         kpi_items = []
         for col_key in selected_cols:
             mi = _OV_COLS.get(col_key, {})
-            if mi.get("fmt") in ("currency","int") and col_key in fdf.columns:
-                kpi_items.append((mi["label"], _fmt_val(fdf[col_key].sum(), mi["fmt"]),
-                                  mi["color"], mi["bg"]))
+            if mi.get("fmt") in ("currency", "int") and col_key in fdf.columns:
+                kpi_items.append((
+                    mi["label"], _fmt_val(fdf[col_key].sum(), mi["fmt"]),
+                    mi["color"], mi["bg"],
+                ))
             elif mi.get("fmt") == "roi" and col_key in fdf.columns:
-                sp  = fdf["Total Spend"].sum()      if "Total Spend"     in fdf.columns else 0
-                rv  = fdf["Shopify Revenue"].sum()  if "Shopify Revenue" in fdf.columns else 0
+                sp    = fdf["Total Spend"].sum()     if "Total Spend"     in fdf.columns else 0
+                rv    = fdf["Shopify Revenue"].sum() if "Shopify Revenue" in fdf.columns else 0
                 roi_v = rv / sp if sp else 0
                 kpi_items.append(("Filtered ROI", f"{roi_v:.2f}x",
                                   "#059669" if roi_v >= 1 else "#DC2626",
@@ -480,14 +1033,32 @@ def render_overall_view():
         )
         return
 
-    # ── Build display table ───────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────
+    # BUILD DISPLAY TABLE
+    # ─────────────────────────────────────────────────────────────────
+
+    if "Total Spend" in fdf.columns:
+        fdf = fdf.sort_values(
+            by="Total Spend",
+            ascending=False,
+            na_position="last"
+        )
+    
+    # fallback if Total Spend missing
+    elif "Meta Spend" in fdf.columns:
+        fdf = fdf.sort_values(
+            by="Meta Spend",
+            ascending=False,
+            na_position="last"
+        )
     always_cols = ["Product ID", "Product Title"]
     if "Variant Title" in fdf.columns:
         always_cols.append("Variant Title")
-    if has_month and "Month" in selected_cols and "Month" in fdf.columns:
+    # Only show Month column if a specific month was chosen (not aggregated)
+    if not _all_months_selected and "Month" in selected_cols and "Month" in fdf.columns:
         always_cols.append("Month")
 
-    disp = fdf[[c for c in always_cols if c in fdf.columns]].copy()
+    disp            = fdf[[c for c in always_cols if c in fdf.columns]].copy()
     display_col_map: dict = {}
 
     for col_key in selected_cols:
@@ -495,18 +1066,23 @@ def render_overall_view():
             continue
         mi       = _OV_COLS.get(col_key, {})
         disp_lbl = mi.get("label", col_key)
-        disp[disp_lbl] = fdf[col_key].apply(lambda v: _fmt_val(v, mi.get("fmt","text")))
+        disp[disp_lbl] = fdf[col_key].apply(
+            lambda v: _fmt_val(v, mi.get("fmt", "text"))
+        )
         display_col_map[disp_lbl] = col_key
 
     disp_cols_data = [c for c in always_cols if c in disp.columns] + list(display_col_map.keys())
 
-    # Totals
+    # ── Totals ──────────────────────────────────────────────────────
     totals_row = {c: ("∑ TOTAL" if c == "Product ID" else "") for c in always_cols}
     for disp_lbl, col_key in display_col_map.items():
         mi  = _OV_COLS.get(col_key, {})
-        fmt = mi.get("fmt","text")
-        if fmt in ("currency","int") and col_key in fdf.columns:
+        fmt = mi.get("fmt", "text")
+        if fmt in ("currency", "int") and col_key in fdf.columns:
             totals_row[disp_lbl] = _fmt_val(fdf[col_key].sum(), fmt)
+        elif fmt == "pct" and col_key in fdf.columns:
+            # weighted average for rate columns
+            totals_row[disp_lbl] = _fmt_val(fdf[col_key].mean(), fmt)
         elif fmt == "roi":
             sp = fdf["Total Spend"].sum()     if "Total Spend"     in fdf.columns else 0
             rv = fdf["Shopify Revenue"].sum() if "Shopify Revenue" in fdf.columns else 0
@@ -514,7 +1090,7 @@ def render_overall_view():
         else:
             totals_row[disp_lbl] = ""
 
-    # Totals pills — accent colours still accent, background is from column definition
+    # Totals pills
     totals_html = ""
     for disp_lbl, col_key in display_col_map.items():
         mi  = _OV_COLS.get(col_key, {})
@@ -529,12 +1105,11 @@ def render_overall_view():
             )
 
     if totals_html:
-        # Uses .th-totals-bar which maps to var(--surface-totals) — light/dark safe
         st.markdown(
             f'<div class="th-totals-bar">'
             f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
             f'letter-spacing:.1em;margin-bottom:6px;" class="th-text-faint">'
-            f'∑ Totals · {n_shown:,} rows</div>'
+            f'∑ Totals · {n_shown:,} products</div>'
             f'<div style="display:flex;flex-wrap:wrap;gap:4px">{totals_html}</div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -547,12 +1122,14 @@ def render_overall_view():
         height=500,
     )
 
-    # Grand totals dark bar — intentionally always dark (brand style), just like the sidebar
+    # Grand totals dark bar
     st.markdown(
         f'<div class="th-grand-bar">'
         f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
         f'letter-spacing:.1em;margin-bottom:8px;" class="th-text-grandtot">'
-        f'∑ Grand Totals — {n_shown:,} products</div>'
+        f'∑ Grand Totals — {n_shown:,} products'
+        f'{"  ·  All months combined" if _all_months_selected and has_month else ""}'
+        f'</div>'
         f'<div style="display:flex;flex-wrap:wrap;gap:6px">{totals_html}</div>'
         f'</div>',
         unsafe_allow_html=True,
@@ -561,13 +1138,13 @@ def render_overall_view():
     # ── Download ──────────────────────────────────────────────────────
     dl1, dl2 = st.columns([2, 4])
     with dl1:
-        export_cols = ["Product ID","Product Title"]
-        if has_month and "Month" in df.columns:
+        export_cols = ["Product ID", "Product Title"]
+        if not _all_months_selected and has_month and "Month" in fdf.columns:
             export_cols.append("Month")
         for col_key in selected_cols:
             if col_key not in export_cols and col_key in fdf.columns:
                 export_cols.append(col_key)
-        csv_buf = fdf[export_cols].to_csv(index=False).encode("utf-8")
+        csv_buf = fdf[[c for c in export_cols if c in fdf.columns]].to_csv(index=False).encode("utf-8")
         st.download_button(
             label="⬇  Download CSV",
             data=csv_buf,
@@ -587,8 +1164,6 @@ def render_overall_view():
             f'</span></div>',
             unsafe_allow_html=True,
         )
-
-
 # ══════════════════════════════════════════════════════════════════════
 #  SECTION 1 — DISCOUNT ANALYSIS
 # ══════════════════════════════════════════════════════════════════════
