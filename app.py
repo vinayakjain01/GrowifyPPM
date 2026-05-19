@@ -624,7 +624,13 @@ def render_discount_view():
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("""...""", unsafe_allow_html=True)
+        # st.markdown("""...""", unsafe_allow_html=True)
+        st.markdown("""<div style="background:#EFF6FF;border-radius:10px;padding:10px 14px;
+            margin-bottom:8px;border-left:3px solid #2563EB">
+            <div style="font-size:12px;font-weight:700;color:#2563EB">① Meta Ads</div>
+            <div style="font-size:11px;color:#64748B;margin-top:3px">
+            Raw export — Product ID split + cleaned automatically</div></div>""",
+            unsafe_allow_html=True) 
         meta_file = st.file_uploader("Meta CSV", type=["csv","xlsx"], key="s1_meta",
                                       label_visibility="collapsed")
         # ✅ Save bytes immediately
@@ -634,7 +640,13 @@ def render_discount_view():
             meta_file.seek(0)
 
     with col2:
-        st.markdown("""...""", unsafe_allow_html=True)
+        # st.markdown("""...""", unsafe_allow_html=True)
+        st.markdown("""<div style="background:#ECFDF5;border-radius:10px;padding:10px 14px;
+            margin-bottom:8px;border-left:3px solid #059669">
+            <div style="font-size:12px;font-weight:700;color:#059669">② Shopify</div>
+            <div style="font-size:11px;color:#64748B;margin-top:3px">
+            Raw export — variant ID renamed automatically</div></div>""",
+            unsafe_allow_html=True)
         shopify_file = st.file_uploader("Shopify CSV", type=["csv","xlsx"], key="s1_shop",
                                          label_visibility="collapsed")
         # ✅ Save bytes immediately
@@ -644,7 +656,13 @@ def render_discount_view():
             shopify_file.seek(0)
 
     with col3:
-        st.markdown("""...""", unsafe_allow_html=True)
+        # st.markdown("""...""", unsafe_allow_html=True)
+        st.markdown("""<div style="background:#FFF7ED;border-radius:10px;padding:10px 14px;
+            margin-bottom:8px;border-left:3px solid #F59E0B">
+            <div style="font-size:12px;font-weight:700;color:#D97706">③ Discount Product List</div>
+            <div style="font-size:11px;color:#64748B;margin-top:3px">
+            CSV with Product ID column of discounted SKUs</div></div>""",
+            unsafe_allow_html=True)
         discount_file = st.file_uploader("Discount list", type=["csv","xlsx"], key="s1_disc",
                                           label_visibility="collapsed")
         # ✅ Save bytes immediately
