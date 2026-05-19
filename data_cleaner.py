@@ -109,13 +109,26 @@ def clean_meta(file_obj) -> Tuple[pd.DataFrame, list]:
     # ── Split "12345, Title Text" into Product ID + Product Title ──
     def _split_pid_title(raw_val):
         s = str(raw_val).strip()
-        # Match leading digits (the ID), then optional comma/space, then the rest
-        m = re.match(r'^(\d+)\s*,\s*(.*)', s, re.DOTALL)
-        if m:
-            return m.group(1).strip(), m.group(2).strip()
-        # If no comma split found, treat entire value as ID with no title
-        warnings.append(f"Meta: Could not split Product ID/Title from: '{s[:60]}…'")
-        return s, ""
+        if s == "" or s.lower() == "nan":
+            return "", "Unknown Product"
+        try:
+            m = re.match(
+                r'^(\d+)\s*[,|\-|:]*\s*(.*)',
+                s,
+                re.DOTALL
+            )
+    
+            if m:
+                pid = m.group(1).strip()
+                title = m.group(2).strip()
+    
+                if title == "":
+                    title = "Unknown Product"
+    
+                return pid, title
+        except:
+            pass
+        return s, "Unknown Product"
 
     split_results = df[pid_col].apply(_split_pid_title)
     df["Product ID"]    = split_results.apply(lambda x: x[0])
