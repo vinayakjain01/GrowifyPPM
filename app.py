@@ -1136,32 +1136,53 @@ def render_overall_view():
     )
 
     # ── Download ──────────────────────────────────────────────────────
-    dl1, dl2 = st.columns([2, 4])
-    with dl1:
-        export_cols = ["Product ID", "Product Title"]
-        if not _all_months_selected and has_month and "Month" in fdf.columns:
-            export_cols.append("Month")
+    dl_name_col, dl_btn_col, dl_info_col = st.columns([3, 2, 3])
+
+    with dl_name_col:
+        st.markdown("<div style='font-size:11px;font-weight:600;color:#64748B;margin-bottom:4px'>📄 File Name</div>", unsafe_allow_html=True)
+        custom_filename = st.text_input(
+            "File name",
+            value="overall_view_filtered",
+            placeholder="Enter file name…",
+            label_visibility="collapsed",
+            key="ov_download_name",
+        )
+        # Sanitise: strip spaces, remove .csv if user typed it
+        safe_name = custom_filename.strip().replace(" ", "_") if custom_filename.strip() else "overall_view_filtered"
+        safe_name = safe_name.removesuffix(".csv")
+
+    with dl_btn_col:
+        st.markdown("<div style='font-size:11px;font-weight:600;color:#64748B;margin-bottom:4px'>⬇ Download</div>", unsafe_allow_html=True)
+
+        # Build export — exactly the columns visible on screen
+        # always_cols already prepended in disp; selected_cols are the user-chosen metrics
+        export_cols = [c for c in always_cols if c in fdf.columns]
         for col_key in selected_cols:
             if col_key not in export_cols and col_key in fdf.columns:
                 export_cols.append(col_key)
-        csv_buf = fdf[[c for c in export_cols if c in fdf.columns]].to_csv(index=False).encode("utf-8")
+
+        csv_buf = fdf[export_cols].to_csv(index=False).encode("utf-8")
+
         st.download_button(
             label="⬇  Download CSV",
             data=csv_buf,
-            file_name="overall_view_filtered.csv",
+            file_name=f"{safe_name}.csv",
             mime="text/csv",
             type="primary",
             use_container_width=True,
+            key="ov_dl_btn",
         )
-    with dl2:
-        col_names = ", ".join([_OV_COLS.get(c, {}).get("label", c) for c in selected_cols])
+
+    with dl_info_col:
+        st.markdown("<div style='font-size:11px;font-weight:600;color:#64748B;margin-bottom:4px'>ℹ Info</div>", unsafe_allow_html=True)
+        col_names = ", ".join([_OV_COLS.get(c, {}).get("label", c) for c in export_cols])
         st.markdown(
-            f'<div class="th-card-muted" style="padding:10px 14px;height:100%;'
-            f'display:flex;align-items:center;">'
-            f'<span class="th-text-muted" style="font-size:12px">'
-            f'Exporting <strong class="th-text-primary">{n_shown:,} rows</strong>'
-            f' with <strong class="th-text-primary">{len(selected_cols)} columns</strong>'
-            f'</span></div>',
+            f'<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;'
+            f'padding:8px 12px;font-size:12px;color:#64748B;line-height:1.5">'
+            f'<strong style="color:#1E293B">{n_shown:,} rows</strong> · '
+            f'<strong style="color:#1E293B">{len(export_cols)} cols</strong><br>'
+            f'<span style="font-size:10px;color:#94A3B8">{col_names[:80]}{"…" if len(col_names)>80 else ""}</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 # ══════════════════════════════════════════════════════════════════════
