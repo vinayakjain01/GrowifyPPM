@@ -2,7 +2,7 @@
 # ║  app.py  —  Brand Analysis Tool  (modular, v10 — theme-aware UI)   ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 
-import streamlit as st
+import streamlit as st # type: ignore
 import pandas as pd
 import numpy as np
 import datetime
