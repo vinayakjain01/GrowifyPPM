@@ -215,6 +215,12 @@ button[data-baseweb="tab"][aria-selected="true"] {
   box-shadow: 0 4px 12px rgba(37,99,235,.35) !important;
   transform: translateY(-1px) !important;
 }
+.stButton button[kind="primary"],
+.stButton button[kind="primary"] *,
+.stDownloadButton button,
+.stDownloadButton button * {
+  color: #FFFFFF !important;
+}
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    INPUTS  — use token so they flip automatically
@@ -291,7 +297,10 @@ h2, h3 {
   color: var(--text-secondary) !important;
 }
 p { color: var(--text-muted) !important; }
-.stCaption { font-size: 12px !important; color: var(--text-faint) !important; }
+.stCaption {
+    font-size: 12px !important;
+    color: white !important;
+}
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ALERT / INFO
@@ -481,10 +490,15 @@ p { color: var(--text-muted) !important; }
   color: var(--text-muted);
   margin: 0;
 }
+.metric-help {
+    color: #0F172A !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+}
 </style>
 """
 
 
 def inject_theme_css():
-    import streamlit as st
+    import streamlit as st # type: ignore
     st.markdown(THEME_CSS, unsafe_allow_html=True)
