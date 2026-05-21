@@ -449,29 +449,30 @@ def run_product_analysis(
     meta["_month"]    = meta["Month"].apply(make_month_label)
     shopify["_month"] = shopify["Month"].apply(make_month_label)
 
-    meta_gm    = meta.groupby(["_pid", "_month"])["_spend"].sum().reset_index()
-    shopify_gm = shopify.groupby(["_pid", "_month"])["_rev"].sum().reset_index()
-    merged_m   = pd.merge(meta_gm, shopify_gm, on=["_pid", "_month"], how="outer").fillna(0) # type: ignore
-    merged_m.columns = ["Product ID", "Month", "Spend", "Revenue"]
-    merged_m["Product Title"] = merged_m["Product ID"].map(title_map).fillna("Unknown")
-
-    _shop_text_cols = ["_rev", "_sold"]
-    _shop_first_cols = {}
+    # ── Build Shopify agg dict safely (only include cols that exist) ──
+    _shop_agg_m = {}
+    if "_rev" in shopify.columns: _shop_agg_m["_rev"] = "sum"
     for _tc in ["Product type", "Product vendor", "Product collection"]:
         if _tc in shopify.columns:
-            _shop_first_cols[_tc] = "first"
-    shopify_g = shopify.groupby(["_pid", "_month"]).agg(
-        {**{"_rev": "sum", "_sold": "sum"}, **_shop_first_cols}
-    ).reset_index()
-    
-    # non-month branch:
-    shopify_g = shopify.groupby("_pid").agg(
-        {**{"_rev": "sum", "_sold": "sum"}, **_shop_first_cols}
-    ).reset_index()
+            _shop_agg_m[_tc] = "first"
 
+    _shop_agg = dict(_shop_agg_m)  # same cols for overall groupby
+
+    # ── Monthly aggregations ──────────────────────────────────────────
+    meta_gm    = meta.groupby(["_pid", "_month"])["_spend"].sum().reset_index()
+    shopify_gm = shopify.groupby(["_pid", "_month"]).agg(_shop_agg_m).reset_index()
+
+    merged_m   = pd.merge(meta_gm, shopify_gm, on=["_pid", "_month"], how="outer").fillna(0)
+    merged_m.columns = ["Product ID", "Month", "Spend", "Revenue"] + \
+                       [c for c in merged_m.columns if c not in ["_pid", "_month", "_spend", "_rev"]]
+    merged_m["Product Title"] = merged_m["Product ID"].map(title_map).fillna("Unknown")
+
+    # ── Overall aggregations ──────────────────────────────────────────
     meta_g    = meta.groupby("_pid")["_spend"].sum().reset_index()
+    shopify_g = shopify.groupby("_pid").agg(_shop_agg).reset_index()
+
     merged    = pd.merge(meta_g, shopify_g, on="_pid", how="outer").fillna(0)
-    merged.columns = ["Product ID", "Spend", "Revenue"]
+    merged    = merged.rename(columns={"_pid": "Product ID", "_spend": "Spend", "_rev": "Revenue"})
     merged["Product Title"] = merged["Product ID"].map(title_map).fillna("Unknown")
     merged["ROI"] = (merged["Revenue"] / merged["Spend"].replace(0, float("nan"))).fillna(0).round(4)
 
