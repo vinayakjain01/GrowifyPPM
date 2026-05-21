@@ -258,10 +258,18 @@ def run_overall_view(
     # Variant title (Shopify only — may not be per-month, use overall map)
     merged["Variant Title"] = merged["Product ID"].map(variant_map).fillna("")
 
-    total_spend = merged["Total Spend"]
-    merged["ROI"] = (
-        merged["Shopify Revenue"] / total_spend.replace(0, float("nan"))
-    ).fillna(0).round(4)
+    for _tc in ["Product type", "Product vendor", "Product collection"]:
+        if _tc in merged.columns:
+            pass  # already there from the merge
+        elif _tc in shopify.columns:
+            # fallback: map from shopify directly
+            _tc_map = shopify.drop_duplicates("_pid").set_index("_pid")[_tc].to_dict()
+            merged[_tc] = merged["Product ID"].map(_tc_map).fillna("")
+    
+        total_spend = merged["Total Spend"]
+        merged["ROI"] = (
+            merged["Shopify Revenue"] / total_spend.replace(0, float("nan"))
+        ).fillna(0).round(4)
 
     # ── Final column order ───────────────────────────────────────────
     keep = ["Product ID", "Google Item ID", "Product Title", "Variant Title"]
@@ -271,7 +279,8 @@ def run_overall_view(
         "Meta Spend", "Google Cost", "Total Spend",
         "Shopify Revenue", "Net Items Sold",
         "Landing Page Views", "Conversions",
-        "CTR", "CPM", "ROI","Google Item ID",
+        "CTR", "CPM", "ROI",
+        "Product type", "Product vendor", "Product collection",  # ← moved here, no duplicate
     ]
 
     out = merged[[c for c in keep if c in merged.columns]].copy()
@@ -441,13 +450,25 @@ def run_product_analysis(
     shopify["_month"] = shopify["Month"].apply(make_month_label)
 
     meta_gm    = meta.groupby(["_pid", "_month"])["_spend"].sum().reset_index()
-    shopify_gm = shopify.groupby(["_pid", "_month"])["_rev"].sum().reset_index()
-    merged_m   = pd.merge(meta_gm, shopify_gm, on=["_pid", "_month"], how="outer").fillna(0)
+    merged_m   = pd.merge(meta_gm, shopify_gm, on=["_pid", "_month"], how="outer").fillna(0) # type: ignore
     merged_m.columns = ["Product ID", "Month", "Spend", "Revenue"]
     merged_m["Product Title"] = merged_m["Product ID"].map(title_map).fillna("Unknown")
 
+    _shop_text_cols = ["_rev", "_sold"]
+    _shop_first_cols = {}
+    for _tc in ["Product type", "Product vendor", "Product collection"]:
+        if _tc in shopify.columns:
+            _shop_first_cols[_tc] = "first"
+    shopify_g = shopify.groupby(["_pid", "_month"]).agg(
+        {**{"_rev": "sum", "_sold": "sum"}, **_shop_first_cols}
+    ).reset_index()
+    
+    # non-month branch:
+    shopify_g = shopify.groupby("_pid").agg(
+        {**{"_rev": "sum", "_sold": "sum"}, **_shop_first_cols}
+    ).reset_index()
+
     meta_g    = meta.groupby("_pid")["_spend"].sum().reset_index()
-    shopify_g = shopify.groupby("_pid")["_rev"].sum().reset_index()
     merged    = pd.merge(meta_g, shopify_g, on="_pid", how="outer").fillna(0)
     merged.columns = ["Product ID", "Spend", "Revenue"]
     merged["Product Title"] = merged["Product ID"].map(title_map).fillna("Unknown")

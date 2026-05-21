@@ -435,6 +435,12 @@ p { color: var(--text-muted) !important; }
   border-radius: 10px;
   padding: 10px 14px;
   margin-bottom: 8px;
+
+  /* Fix inconsistent upload card height */
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 .th-source-title {
   font-size: 12px;
@@ -448,8 +454,9 @@ p { color: var(--text-muted) !important; }
   color: var(--text-muted);
   margin-top: 3px;
   line-height: 1.4;
-}
 
+  min-height: 36px;   /* reserve equal text area */
+}
 /* Operator/value filter cell label */
 .th-filter-label {
   font-size: 10px;

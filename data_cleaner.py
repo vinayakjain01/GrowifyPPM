@@ -32,6 +32,9 @@ SHOPIFY_KEEP_COLS = [
     "Product variant title",
     "Net items sold",
     "Net sales",
+    "Product type",
+    "Product vendor",
+    "Product collection",
 ]
 
 # Google: columns we want to keep (after cleaning header + ID extraction)
@@ -243,6 +246,18 @@ def clean_shopify(file_obj) -> Tuple[pd.DataFrame, list]:
         df = df.rename(columns={sales_col: "Net sales"})
     if sold_col  and sold_col  != "Net items sold":
         df = df.rename(columns={sold_col:  "Net items sold"})
+
+    # ── Rename Product type / vendor / collection ──────────────────
+    type_col       = _find_col(df, "Product type")
+    vendor_col     = _find_col(df, "Product vendor")
+    collection_col = _find_col(df, "Product collection")
+
+    if type_col       and type_col       != "Product type":
+        df = df.rename(columns={type_col: "Product type"})
+    if vendor_col     and vendor_col     != "Product vendor":
+        df = df.rename(columns={vendor_col: "Product vendor"})
+    if collection_col and collection_col != "Product collection":
+        df = df.rename(columns={collection_col: "Product collection"})
 
     # ── Numeric coercion ────────────────────────────────────────────
     for col in ["Net sales", "Net items sold"]:

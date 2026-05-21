@@ -153,6 +153,9 @@ _OV_COLS = {
     "CPM":                {"label": "CPM (₹)",         "fmt": "currency", "source": "Meta",    "color": "#2563EB", "bg": "#EFF6FF"},
     "Variant Title":      {"label": "Variant Title",   "fmt": "text",     "source": "Shopify", "color": "#059669", "bg": "#ECFDF5"},
     "Month":              {"label": "Month",           "fmt": "text",     "source": "All",     "color": "#64748B", "bg": "#F8FAFC"},
+    "Product type":       {"label": "Product Type",    "fmt": "text",     "source": "Shopify", "color": "#059669", "bg": "#ECFDF5"},
+    "Product vendor":     {"label": "Product Vendor",  "fmt": "text",     "source": "Shopify", "color": "#059669", "bg": "#ECFDF5"},
+    "Product collection": {"label": "Product Collection","fmt": "text",   "source": "Shopify", "color": "#059669", "bg": "#ECFDF5"},
 }
 
 
@@ -234,7 +237,7 @@ def render_overall_view():
     col1, col2, col3 = st.columns(3)
     with col1:
         upload_card("#2563EB", "#EFF6FF", "① Meta Ads",
-                    "Raw export — auto-cleaned")
+                "Product ID · Month · Amount Spent · Landing Page Views · CTR · CPM")
         meta_file = st.file_uploader("Meta CSV", type=["csv","xlsx"],
                                       key="ov_meta_upload", label_visibility="collapsed")
         _persist_upload(meta_file, "ov_meta_bytes", "ov_meta_name")
@@ -242,7 +245,7 @@ def render_overall_view():
 
     with col2:
         upload_card("#059669", "#ECFDF5", "② Shopify",
-                    "Raw export — auto-cleaned")
+                "Product Variant ID · Product Title · Month · Product type · Product vendor	· Product collection· Net Sales · Net Items Sold")
         shopify_file = st.file_uploader("Shopify CSV", type=["csv","xlsx"],
                                          key="ov_shopify_upload", label_visibility="collapsed")
         _persist_upload(shopify_file, "ov_shopify_bytes", "ov_shopify_name")
@@ -250,7 +253,7 @@ def render_overall_view():
 
     with col3:
         upload_card("#D97706", "#FFF7ED", "③ Google Ads (optional)",
-                    "Raw export — auto-cleaned")
+                "Item ID · Product Title · Month · Cost · Conversions")
         google_file = st.file_uploader("Google CSV", type=["csv","xlsx"],
                                         key="ov_google_upload", label_visibility="collapsed")
         _persist_upload(google_file, "ov_google_bytes", "ov_google_name")
@@ -375,8 +378,8 @@ def render_overall_view():
 
     # ── Build working dataframe ───────────────────────────────────────
     SUM_COLS  = ["Meta Spend","Google Cost","Total Spend","Shopify Revenue",
-                 "Net Items Sold","Landing Page Views","Conversions","CPM"]
-    RATE_COLS = ["CTR"]
+                 "Net Items Sold","Landing Page Views","Conversions"]
+    RATE_COLS = ["CTR","CPM"]
 
     if _all_months_selected and has_month and "Month" in df.columns:
         agg_dict = {}
@@ -386,6 +389,10 @@ def render_overall_view():
             if c in df.columns: agg_dict[c] = "mean"
         if "Variant Title" in df.columns:
             agg_dict["Variant Title"] = "first"
+        # Preserve Shopify text attributes
+        for _txt_col in ["Product type", "Product vendor", "Product collection"]:
+            if _txt_col in df.columns:
+                agg_dict[_txt_col] = "first"
         group_keys = [k for k in ["Product ID","Product Title"] if k in df.columns]
         work_df = df.groupby(group_keys, as_index=False).agg(agg_dict) if agg_dict \
                   else df.groupby(group_keys, as_index=False).first()
@@ -433,28 +440,52 @@ def render_overall_view():
         st.info("Select at least one metric above to begin filtering.")
         return
 
-    # ── Search Inputs ─────────────────────────────────────────────────
-    srch_a, srch_b = st.columns([3, 3])
-    with srch_a:
+    # ── Smart Search: field dropdown + search bar ─────────────────────
+    # Build list of searchable fields — only include columns that exist in work_df
+    _SEARCH_FIELD_MAP = {
+        "Product ID":         "Product ID",
+        "Product Title":      "Product Title",
+        "Variant Title":      "Variant Title",
+        "Product Type":       "Product type",       # ← lowercase 't' matches Shopify output
+        "Product Vendor":     "Product vendor",     # ← lowercase 'v'
+        "Product Collection": "Product collection", # ← lowercase 'c'
+    }
+    # Only show options where the underlying column exists in work_df
+    _available_search_options = [
+        label for label, col in _SEARCH_FIELD_MAP.items()
+        if col in work_df.columns
+    ]
+
+    sch_drop, sch_input = st.columns([2, 5])
+    with sch_drop:
         st.markdown(
             '<div class="th-filter-label" style="font-size:11px;font-weight:600;'
-            'margin-bottom:4px">🔎 Product Search</div>',
+            'margin-bottom:4px">🔎 Search Field</div>',
             unsafe_allow_html=True,
         )
-        search_text = st.text_input("Search", placeholder="Product title or ID…",
-                                    label_visibility="collapsed", key="ov_search")
-    with srch_b:
-        if "Variant Title" in selected_cols and "Variant Title" in work_df.columns:
-            st.markdown(
-                '<div class="th-filter-label" style="font-size:11px;font-weight:600;'
-                'margin-bottom:4px">🏷 Variant Search</div>',
-                unsafe_allow_html=True,
-            )
-            variant_search = st.text_input("Variant", placeholder="e.g. XL, M, Blue…",
-                                            label_visibility="collapsed",
-                                            key="ov_variant_search")
-        else:
-            variant_search = ""
+        search_field_label = st.selectbox(
+            "Search by field",
+            options=_available_search_options,
+            label_visibility="collapsed",
+            key="ov_search_field",
+        )
+    # Resolve label → actual column name in work_df
+    search_col = _SEARCH_FIELD_MAP[search_field_label]
+
+    with sch_input:
+        st.markdown(
+            f'<div class="th-filter-label" style="font-size:11px;font-weight:600;'
+            f'margin-bottom:4px">Search in {search_field_label}</div>',
+            unsafe_allow_html=True,
+        )
+        search_text = st.text_input(
+            "Search value",
+            placeholder=f"Type to search {search_field_label}…",
+            label_visibility="collapsed",
+            key="ov_search",
+        )
+
+    variant_search = ""   # no longer a separate box; handled via dropdown above
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
@@ -591,7 +622,9 @@ def render_overall_view():
         with reset_col:
             if st.button("↺ Reset", key="ov_reset"):
                 keys_to_del = ["ov_search","ov_period","ov_col_sel","ov_variant_search",
-                               "ov_active_filters","ov_filter_panel_open"]
+                               "ov_active_filters","ov_filter_panel_open",
+                               "ov_search_field","ov_search_col_snap","ov_search_snap",
+                               "ov_variant_snap"]
                 for c in available_cols:
                     keys_to_del += [f"ov_op_{c}",f"ov_val_{c}",f"ov_txt_{c}",
                                     f"ov_min_{c}",f"ov_max_{c}"]
@@ -602,10 +635,10 @@ def render_overall_view():
         if apply_clicked:
             st.session_state["ov_active_filters"]    = dict(pending_specs)
             st.session_state["ov_search_snap"]       = search_text
+            st.session_state["ov_search_col_snap"]   = search_col   # save which column
             st.session_state["ov_variant_snap"]      = variant_search
             st.session_state["ov_filter_panel_open"] = False
             st.rerun()
-
     # ── Apply committed filters ───────────────────────────────────────
     active_filters    = st.session_state.get("ov_active_filters", {})
     committed_search  = st.session_state.get("ov_search_snap",  search_text)
@@ -615,10 +648,19 @@ def render_overall_view():
 
     if committed_search.strip():
         q = committed_search.strip().lower()
-        fdf = fdf[
-            fdf["Product Title"].str.lower().str.contains(q, na=False) |
-            fdf["Product ID"].astype(str).str.lower().str.contains(q, na=False)
-        ]
+        # Use the saved search column from the last Apply click;
+        # fall back to search_col from the current widget if no snap yet
+        _active_search_col = st.session_state.get("ov_search_col_snap", search_col)
+        if _active_search_col in fdf.columns:
+            fdf = fdf[
+                fdf[_active_search_col].astype(str).str.lower().str.contains(q, na=False)
+            ]
+        else:
+            # Fallback: search Product Title + Product ID
+            fdf = fdf[
+                fdf["Product Title"].astype(str).str.lower().str.contains(q, na=False) |
+                fdf["Product ID"].astype(str).str.lower().str.contains(q, na=False)
+            ]
 
     if committed_variant.strip() and "Variant Title" in fdf.columns:
         fdf = fdf[
@@ -743,7 +785,11 @@ def render_overall_view():
         mi  = _OV_COLS.get(col_key, {})
         fmt = mi.get("fmt","text")
         if fmt in ("currency","int") and col_key in fdf.columns:
-            totals_row[disp_lbl] = _fmt_val(fdf[col_key].sum(), fmt)
+            # CPM is a rate — average, not sum
+            if col_key == "CPM":
+                totals_row[disp_lbl] = _fmt_val(fdf[col_key].mean(), fmt)
+            else:
+                totals_row[disp_lbl] = _fmt_val(fdf[col_key].sum(), fmt)
         elif fmt == "pct" and col_key in fdf.columns:
             totals_row[disp_lbl] = _fmt_val(fdf[col_key].mean(), fmt)
         elif fmt == "roi":
@@ -969,24 +1015,24 @@ def render_discount_view():
     # ── FIX 3: Persistent uploads for Discount View ───────────────────
     col1, col2, col3 = st.columns(3)
     with col1:
-        upload_card("#2563EB","#EFF6FF","① Meta Ads",
-                    "Raw export — Product ID split + cleaned automatically")
+        upload_card("#2563EB", "#EFF6FF", "① Meta Ads",
+                "Cols: Product ID · Month · Amount Spent · Landing Page Views · CTR · CPM")
         meta_file = st.file_uploader("Meta CSV", type=["csv","xlsx"],
                                       key="s1_meta", label_visibility="collapsed")
         _persist_upload(meta_file, "s1_meta_bytes", "s1_meta_name")
         _show_stored_badge("s1_meta_bytes", "s1_meta_name")
 
     with col2:
-        upload_card("#059669","#ECFDF5","② Shopify",
-                    "Raw export — variant ID renamed automatically")
+        upload_card("#059669", "#ECFDF5", "② Shopify",
+                "Cols: Product Variant ID · Product Title · Month · Net Sales · Net Items Sold")
         shopify_file = st.file_uploader("Shopify CSV", type=["csv","xlsx"],
                                          key="s1_shop", label_visibility="collapsed")
         _persist_upload(shopify_file, "s1_shopify_bytes", "s1_shopify_name")
         _show_stored_badge("s1_shopify_bytes", "s1_shopify_name")
 
     with col3:
-        upload_card("#D97706","#FFF7ED","③ Discount Product List",
-                    "CSV with Product ID column of discounted SKUs")
+        upload_card("#D97706", "#FFF7ED", "③ Google Ads (optional)",
+                "Cols: Item ID · Product Title · Month · Cost · Conversions")
         discount_file = st.file_uploader("Discount list", type=["csv","xlsx"],
                                           key="s1_disc", label_visibility="collapsed")
         _persist_upload(discount_file, "s1_disc_bytes", "s1_disc_name")
