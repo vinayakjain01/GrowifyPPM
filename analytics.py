@@ -450,6 +450,7 @@ def run_product_analysis(
     shopify["_month"] = shopify["Month"].apply(make_month_label)
 
     meta_gm    = meta.groupby(["_pid", "_month"])["_spend"].sum().reset_index()
+    shopify_gm = shopify.groupby(["_pid", "_month"])["_rev"].sum().reset_index()
     merged_m   = pd.merge(meta_gm, shopify_gm, on=["_pid", "_month"], how="outer").fillna(0) # type: ignore
     merged_m.columns = ["Product ID", "Month", "Spend", "Revenue"]
     merged_m["Product Title"] = merged_m["Product ID"].map(title_map).fillna("Unknown")
