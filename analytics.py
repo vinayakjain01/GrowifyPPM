@@ -168,8 +168,18 @@ def run_overall_view(
         meta_g    = meta.groupby(["_pid", "_month"])[meta_agg_cols].sum().reset_index()
         shopify_g = shopify.groupby(["_pid", "_month"])[["_rev", "_sold"]].sum().reset_index()
 
+        
+
         if has_google:
-            google_g  = google.groupby(["_pid", "_month"])[["_cost", "_conv"]].sum().reset_index()
+            google_g = (
+                google.groupby(["_pid", "_month"])
+                .agg({
+                    "_cost": "sum",
+                    "_conv": "sum",
+                    "Google Item ID": "first"   # ADD THIS
+                })
+                .reset_index()
+            )
             merged = (
                 meta_g
                 .merge(shopify_g, on=["_pid", "_month"], how="outer")
@@ -192,7 +202,15 @@ def run_overall_view(
         shopify_g = shopify.groupby("_pid")[["_rev", "_sold"]].sum().reset_index()
 
         if has_google:
-            google_g  = google.groupby("_pid")[["_cost", "_conv"]].sum().reset_index()
+            google_g = (
+                google.groupby("_pid")
+                .agg({
+                    "_cost": "sum",
+                    "_conv": "sum",
+                    "Google Item ID": "first"   # ADD THIS
+                })
+                .reset_index()
+            )
             merged = (
                 meta_g
                 .merge(shopify_g, on="_pid", how="outer")
@@ -222,6 +240,21 @@ def run_overall_view(
     merged["CTR"]                 = merged["_ctr"]
     merged["CPM"]                 = merged["_cpm"]
 
+    # Preserve original Google Item ID
+    if has_google and "Google Item ID" in google.columns:
+        google_item_map = (
+            google.drop_duplicates("_pid")
+            .set_index("_pid")["Google Item ID"]
+            .to_dict()
+        )
+    
+        merged["Google Item ID"] = (
+            merged["Product ID"]
+            .apply(clean_pid)
+            .map(google_item_map)
+            .fillna("")
+        )
+
     # Variant title (Shopify only — may not be per-month, use overall map)
     merged["Variant Title"] = merged["Product ID"].map(variant_map).fillna("")
 
@@ -231,14 +264,14 @@ def run_overall_view(
     ).fillna(0).round(4)
 
     # ── Final column order ───────────────────────────────────────────
-    keep = ["Product ID", "Product Title", "Variant Title"]
+    keep = ["Product ID", "Google Item ID", "Product Title", "Variant Title"]
     if has_month:
         keep.append("Month")
     keep += [
         "Meta Spend", "Google Cost", "Total Spend",
         "Shopify Revenue", "Net Items Sold",
         "Landing Page Views", "Conversions",
-        "CTR", "CPM", "ROI",
+        "CTR", "CPM", "ROI","Google Item ID",
     ]
 
     out = merged[[c for c in keep if c in merged.columns]].copy()

@@ -217,9 +217,22 @@ button[data-baseweb="tab"][aria-selected="true"] {
 }
 .stButton button[kind="primary"],
 .stButton button[kind="primary"] *,
-.stDownloadButton button,
-.stDownloadButton button * {
-  color: #FFFFFF !important;
+.stDownloadButton > button {
+    background: #2563EB !important;
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+    border: none !important;
+}
+
+.stDownloadButton > button span,
+.stDownloadButton > button div,
+.stDownloadButton > button p {
+    color: #FFFFFF !important;
+}
+
+.stDownloadButton > button:hover {
+    background: #1D4ED8 !important;
+    color: #FFFFFF !important;
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

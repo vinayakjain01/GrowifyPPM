@@ -808,7 +808,43 @@ def render_overall_view():
         for col_key in selected_cols:
             if col_key not in export_cols and col_key in fdf.columns:
                 export_cols.append(col_key)
-        csv_buf = fdf[export_cols].to_csv(index=False).encode("utf-8")
+        # Always append Google Item ID if present — maps cleaned ID back to original
+        if "Google Item ID" in fdf.columns and "Google Item ID" not in export_cols:
+            export_cols.append("Google Item ID")
+
+        # Build filter summary rows to prepend above data
+        filter_lines = []
+        filter_lines.append(["APPLIED FILTERS"])
+        filter_lines.append([f"Period: {sel_period if has_month and 'Month' in df.columns else 'All Time'}"])
+        if committed_search.strip():
+            filter_lines.append([f"Product Search: {committed_search.strip()}"])
+        if committed_variant.strip():
+            filter_lines.append([f"Variant Search: {committed_variant.strip()}"])
+        for col_key, spec in active_filters.items():
+            mi  = _OV_COLS.get(col_key, {})
+            lbl = mi.get("label", col_key)
+            fmt = mi.get("fmt", "text")
+            if spec[0] == "between":
+                filter_lines.append([f"{lbl}: between {_fmt_val(spec[1], fmt)} and {_fmt_val(spec[2], fmt)}"])
+            elif spec[0] == "text":
+                filter_lines.append([f"{lbl}: {len(spec[1])} values selected"])
+            else:
+                op_display = {">": "greater than", "<": "less than", "=": "equals"}.get(spec[0], spec[0])
+                filter_lines.append([f"{lbl}: {op_display} {_fmt_val(spec[1], fmt)}"])
+        filter_lines.append([f"Rows returned: {n_shown:,} of {n_total:,} total"])
+        filter_lines.append([])  # blank separator row
+        filter_lines.append(export_cols)  # column headers
+
+        import io as _io
+        output = _io.StringIO()
+        import csv as _csv
+        writer = _csv.writer(output)
+        for row in filter_lines:
+            writer.writerow(row)
+        # Write data rows
+        for _, row in fdf[export_cols].iterrows():
+            writer.writerow([str(v) for v in row.values])
+        csv_buf = output.getvalue().encode("utf-8")
         st.download_button(
             label="⬇  Download CSV", data=csv_buf,
             file_name=f"{safe_name}.csv", mime="text/csv",
@@ -1188,6 +1224,26 @@ def quadrant_card(qkey: str, df, desc: str):
             disp["Revenue"] = disp["Revenue"].apply(fmt_inr)
             disp["ROI"]     = disp["ROI"].apply(fmt_roi)
             st.dataframe(disp, use_container_width=True, hide_index=True)
+
+            # Download raw (unformatted) CSV for this quadrant
+            dl_col, info_col = st.columns([2, 3])
+            with dl_col:
+                raw_csv = df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label=f"⬇  Download {cfg['label']} Products",
+                    data=raw_csv,
+                    file_name=f"quadrant_{qkey}_{cfg['label'].lower().replace(' ','_')}.csv",
+                    mime="text/csv",
+                    key=f"dl_quad_{qkey}",
+                    use_container_width=True,
+                )
+            with info_col:
+                st.markdown(
+                    f'<div style="font-size:11px;color:var(--text-faint);'
+                    f'padding:6px 0;line-height:1.5">'
+                    f'{n:,} products · Spend, Revenue, ROI columns · raw ₹ values</div>',
+                    unsafe_allow_html=True,
+                )
 
 
 def render_quadrant_view():

@@ -37,6 +37,7 @@ SHOPIFY_KEEP_COLS = [
 # Google: columns we want to keep (after cleaning header + ID extraction)
 GOOGLE_KEEP_COLS = [
     "Product ID",
+    "Google Item ID",
     "Product Title",
     "Month",
     "Cost",
@@ -364,7 +365,8 @@ def clean_google(file_obj) -> Tuple[pd.DataFrame, list]:
         raise ValueError("Google file: 'Item ID' column not found.")
 
     # ── Extract clean Product ID ────────────────────────────────────
-    df["Product ID"] = df[item_id_col].apply(_extract_google_product_id)
+    df["Google Item ID"] = df[item_id_col].astype(str)   # save original BEFORE extracting
+    df["Product ID"]     = df[item_id_col].apply(_extract_google_product_id)
 
     # ── Rename columns ──────────────────────────────────────────────
     rename_map = {}
