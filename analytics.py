@@ -449,22 +449,31 @@ def run_product_analysis(
     meta["_month"]    = meta["Month"].apply(make_month_label)
     shopify["_month"] = shopify["Month"].apply(make_month_label)
 
-    # ── Build Shopify agg dict safely (only include cols that exist) ──
-    _shop_agg_m = {}
-    if "_rev" in shopify.columns: _shop_agg_m["_rev"] = "sum"
-    for _tc in ["Product type", "Product vendor", "Product collection"]:
-        if _tc in shopify.columns:
-            _shop_agg_m[_tc] = "first"
+    # ── Build Shopify agg dict AFTER all computed columns exist ──────
+    # _rev is assigned below, so build the dict after assignment
+    _shop_extra_cols = [c for c in ["Product type", "Product vendor", "Product collection"]
+                        if c in shopify.columns]
 
-    _shop_agg = dict(_shop_agg_m)  # same cols for overall groupby
 
-    # ── Monthly aggregations ──────────────────────────────────────────
+    # Build agg dicts NOW — after _rev and _month are assigned
+    _shop_agg_m = {"_rev": "sum"}
+    for _tc in _shop_extra_cols:
+        _shop_agg_m[_tc] = "first"
+
+    _shop_agg = {"_rev": "sum"}
+    for _tc in _shop_extra_cols:
+        _shop_agg[_tc] = "first"
+
     meta_gm    = meta.groupby(["_pid", "_month"])["_spend"].sum().reset_index()
     shopify_gm = shopify.groupby(["_pid", "_month"]).agg(_shop_agg_m).reset_index()
 
+
     merged_m   = pd.merge(meta_gm, shopify_gm, on=["_pid", "_month"], how="outer").fillna(0)
-    merged_m.columns = ["Product ID", "Month", "Spend", "Revenue"] + \
-                       [c for c in merged_m.columns if c not in ["_pid", "_month", "_spend", "_rev"]]
+    merged_m = merged_m.rename(columns={
+        "_pid": "Product ID", "_month": "Month",
+        "_spend": "Spend", "_rev": "Revenue",
+    })
+
     merged_m["Product Title"] = merged_m["Product ID"].map(title_map).fillna("Unknown")
 
     # ── Overall aggregations ──────────────────────────────────────────
