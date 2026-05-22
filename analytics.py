@@ -331,6 +331,13 @@ def run_discount_analysis(
         for _, r in meta.drop_duplicates("_pid").iterrows():
             title_map[r["_pid"]] = str(r[meta_title_col])
 
+    # ── Google Item ID map (pid → original shopify_in_XX_YY string) ──────
+    google_item_map: Dict[str, str] = {}
+    if "Google Item ID" in meta.columns:
+        for _, r in meta.drop_duplicates("_pid").iterrows():
+            if str(r.get("Google Item ID", "")).strip():
+                google_item_map[r["_pid"]] = str(r["Google Item ID"])
+
     # ── Numeric ──────────────────────────────────────────────────────
     meta["_spend"]    = pd.to_numeric(meta[meta_spend_col],    errors="coerce").fillna(0)
     shopify["_rev"]   = pd.to_numeric(shopify[shopify_rev_col], errors="coerce").fillna(0)
@@ -443,54 +450,67 @@ def run_product_analysis(
         for _, r in meta.drop_duplicates("_pid").iterrows():
             title_map[r["_pid"]] = str(r[meta_title_col])
 
+    # ── Google Item ID map — built only if column exists in meta ─────
+    google_item_map: Dict[str, str] = {}
+    if "Google Item ID" in meta.columns:
+        for _, r in meta.drop_duplicates("_pid").iterrows():
+            val = str(r.get("Google Item ID", "")).strip()
+            if val and val.lower() != "nan":
+                google_item_map[r["_pid"]] = val
+
     meta["_spend"]    = pd.to_numeric(meta[meta_spend_col],    errors="coerce").fillna(0)
     shopify["_rev"]   = pd.to_numeric(shopify[shopify_rev_col], errors="coerce").fillna(0)
 
     meta["_month"]    = meta["Month"].apply(make_month_label)
     shopify["_month"] = shopify["Month"].apply(make_month_label)
 
-    # ── Build Shopify agg dict AFTER all computed columns exist ──────
-    # _rev is assigned below, so build the dict after assignment
-    _shop_extra_cols = [c for c in ["Product type", "Product vendor", "Product collection"]
-                        if c in shopify.columns]
+    # ── Build Shopify agg dict safely ────────────────────────────────
+    _shop_agg_m: Dict[str, str] = {}
+    if "_rev" in shopify.columns:
+        _shop_agg_m["_rev"] = "sum"
+    for _tc in ["Product type", "Product vendor", "Product collection"]:
+        if _tc in shopify.columns:
+            _shop_agg_m[_tc] = "first"
 
+    _shop_agg = dict(_shop_agg_m)
 
-    # Build agg dicts NOW — after _rev and _month are assigned
-    _shop_agg_m = {"_rev": "sum"}
-    for _tc in _shop_extra_cols:
-        _shop_agg_m[_tc] = "first"
-
-    _shop_agg = {"_rev": "sum"}
-    for _tc in _shop_extra_cols:
-        _shop_agg[_tc] = "first"
-
+    # ── Monthly aggregations ─────────────────────────────────────────
     meta_gm    = meta.groupby(["_pid", "_month"])["_spend"].sum().reset_index()
     shopify_gm = shopify.groupby(["_pid", "_month"]).agg(_shop_agg_m).reset_index()
-
-
     merged_m   = pd.merge(meta_gm, shopify_gm, on=["_pid", "_month"], how="outer").fillna(0)
-    merged_m = merged_m.rename(columns={
-        "_pid": "Product ID", "_month": "Month",
-        "_spend": "Spend", "_rev": "Revenue",
+    merged_m   = merged_m.rename(columns={
+        "_pid":   "Product ID",
+        "_month": "Month",
+        "_spend": "Spend",
+        "_rev":   "Revenue",
     })
-
     merged_m["Product Title"] = merged_m["Product ID"].map(title_map).fillna("Unknown")
 
-    # ── Overall aggregations ──────────────────────────────────────────
+    # ── Overall aggregations ─────────────────────────────────────────
     meta_g    = meta.groupby("_pid")["_spend"].sum().reset_index()
     shopify_g = shopify.groupby("_pid").agg(_shop_agg).reset_index()
-
     merged    = pd.merge(meta_g, shopify_g, on="_pid", how="outer").fillna(0)
-    merged    = merged.rename(columns={"_pid": "Product ID", "_spend": "Spend", "_rev": "Revenue"})
-    merged["Product Title"] = merged["Product ID"].map(title_map).fillna("Unknown")
-    merged["ROI"] = (merged["Revenue"] / merged["Spend"].replace(0, float("nan"))).fillna(0).round(4)
+    merged    = merged.rename(columns={
+        "_pid":   "Product ID",
+        "_spend": "Spend",
+        "_rev":   "Revenue",
+    })
+    merged["Product Title"]   = merged["Product ID"].map(title_map).fillna("Unknown")
+    merged["ROI"]             = (merged["Revenue"] / merged["Spend"].replace(0, float("nan"))).fillna(0).round(4)
+    # Always create the column — empty string if no Google data uploaded
+    merged["Google Item ID"]  = merged["Product ID"].map(google_item_map).fillna("")
 
     avg_sp = merged["Spend"].mean()
     avg_rv = merged["Revenue"].mean()
     sp_cut = avg_sp * spend_pct_thresh / 100
     rv_cut = avg_rv * rev_pct_thresh   / 100
 
-    cols = ["Product ID", "Product Title", "Spend", "Revenue", "ROI"]
+    # Include Google Item ID in quadrant cols only if it has any data
+    _has_gid = merged["Google Item ID"].astype(bool).any()
+    cols = ["Product ID", "Google Item ID", "Product Title", "Spend", "Revenue", "ROI"] \
+           if _has_gid else \
+           ["Product ID", "Product Title", "Spend", "Revenue", "ROI"]
+
     q1 = merged[(merged["Revenue"] >= rv_cut) & (merged["Spend"] <  sp_cut)][cols].sort_values("Revenue", ascending=False).reset_index(drop=True)
     q2 = merged[(merged["Revenue"] >= rv_cut) & (merged["Spend"] >= sp_cut)][cols].sort_values("Revenue", ascending=False).reset_index(drop=True)
     q3 = merged[(merged["Revenue"] <  rv_cut) & (merged["Spend"] >= sp_cut)][cols].sort_values("Spend",   ascending=False).reset_index(drop=True)

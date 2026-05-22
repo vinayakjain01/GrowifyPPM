@@ -200,22 +200,27 @@ def _show_stored_badge(bytes_key: str, name_key: str, color: str = "#059669"):
 # ══════════════════════════════════════════════════════════════════════
 
 # Operator options now include "Between"
-OP_OPTIONS = ["— None", "> Greater than", "< Less than", "= Equals", "↔ Between"]
+OP_OPTIONS = ["— None", "> Greater than", "< Less than", "= Equals", "↔ Between",
+              ">= Greater than or Equal", "<= Less than or Equal"]
 OP_MAP     = {
-    "— None":        None,
-    "> Greater than":">",
-    "< Less than":   "<",
-    "= Equals":      "=",
-    "↔ Between":     "between",
+    "— None":                  None,
+    "> Greater than":          ">",
+    "< Less than":             "<",
+    "= Equals":                "=",
+    "↔ Between":               "between",
+    ">= Greater than or Equal":">=",
+    "<= Less than or Equal":   "<=",
 }
 
 
 def _apply_num_filter(series, spec):
     """Apply a filter spec to a pandas Series. Returns boolean mask."""
     op = spec[0]
-    if op == ">":       return series > spec[1]
-    if op == "<":       return series < spec[1]
+    if op == ">":       return series >  spec[1]
+    if op == "<":       return series <  spec[1]
     if op == "=":       return series == spec[1]
+    if op == ">=":      return series >= spec[1]
+    if op == "<=":      return series <= spec[1]
     if op == "between": return (series >= spec[1]) & (series <= spec[2])
     return pd.Series([True] * len(series), index=series.index)
 
@@ -850,13 +855,36 @@ def render_overall_view():
         safe_name = (custom_filename.strip().replace(" ","_") or "overall_view_filtered").removesuffix(".csv")
     with dl_btn_col:
         st.markdown("<div style='font-size:11px;font-weight:600;color:#64748B;margin-bottom:4px'>⬇ Download</div>", unsafe_allow_html=True)
+        # WITH
+        # Start with identity cols always included
         export_cols = [c for c in always_cols if c in fdf.columns]
+        
+        # Add selected metric cols
         for col_key in selected_cols:
             if col_key not in export_cols and col_key in fdf.columns:
                 export_cols.append(col_key)
-        # Always append Google Item ID if present — maps cleaned ID back to original
-        if "Google Item ID" in fdf.columns and "Google Item ID" not in export_cols:
-            export_cols.append("Google Item ID")
+        
+        # Force-append Google Item ID right after Product ID if it exists in the full data
+        # (it may not be in selected_cols since it's not a metric, but must appear in export)
+        _full_data = st.session_state.get("ov_data", pd.DataFrame())
+        if "Google Item ID" in _full_data.columns:
+            # Re-attach Google Item ID from the full dataset into fdf before export
+            if "Google Item ID" not in fdf.columns:
+                fdf = fdf.copy()
+                fdf["Google Item ID"] = fdf["Product ID"].map(
+                    _full_data.drop_duplicates("Product ID")
+                    .set_index("Product ID")["Google Item ID"]
+                    .to_dict()
+                ).fillna("")
+            if "Google Item ID" not in export_cols:
+                # Insert right after Product ID for readability
+                _pid_idx = export_cols.index("Product ID") + 1 if "Product ID" in export_cols else 0
+                export_cols.insert(_pid_idx, "Google Item ID")
+        
+        # Always append Shopify text cols if present
+        for _extra in ["Product type", "Product vendor", "Product collection"]:
+            if _extra in fdf.columns and _extra not in export_cols:
+                export_cols.append(_extra)
 
         # Build filter summary rows to prepend above data
         filter_lines = []
