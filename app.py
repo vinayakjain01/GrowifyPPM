@@ -1495,16 +1495,220 @@ def render_quadrant_view():
         unsafe_allow_html=True,
     )
 
+    # ── Quadrant Filters ──────────────────────────────────────────────────
+    divider()
+    section_header("Search & Filters",
+                   "Filter products across all quadrants", "#7C3AED")
+    
+    all_df_raw = data["all"].copy()
+    
+    # ── Search bar ────────────────────────────────────────────────────────
+    _s2_search_options = ["Product ID", "Product Title"]
+    for _tc in ["Product type", "Product vendor", "Product collection"]:
+        if _tc in all_df_raw.columns:
+            _s2_search_options.append(_tc)
+    
+    sch_col1, sch_col2 = st.columns([2, 5])
+    with sch_col1:
+        st.markdown('<div style="font-size:11px;font-weight:600;color:#64748B;'
+                    'margin-bottom:4px">🔎 Search Field</div>', unsafe_allow_html=True)
+        s2_search_field = st.selectbox("Search field", _s2_search_options,
+                                        label_visibility="collapsed", key="s2_search_field")
+    with sch_col2:
+        st.markdown(f'<div style="font-size:11px;font-weight:600;color:#64748B;'
+                    f'margin-bottom:4px">Search in {s2_search_field}</div>',
+                    unsafe_allow_html=True)
+        s2_search_text = st.text_input("Search", placeholder=f"Type to search {s2_search_field}…",
+                                        label_visibility="collapsed", key="s2_search_text")
+    
+    # ── Category / Type dropdown ──────────────────────────────────────────
+    _cat_cols = [c for c in ["Product type", "Product vendor", "Product collection"]
+                 if c in all_df_raw.columns]
+    if _cat_cols:
+        cat_filter_cols = st.columns(len(_cat_cols))
+        for _ci, _cc in enumerate(_cat_cols):
+            with cat_filter_cols[_ci]:
+                _uniq = ["All"] + sorted(
+                all_df_raw[_cc]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+                )
+                st.markdown(f'<div style="font-size:11px;font-weight:600;color:#64748B;'
+                            f'margin-bottom:4px">{_cc}</div>', unsafe_allow_html=True)
+                st.selectbox(_cc, _uniq, label_visibility="collapsed",
+                             key=f"s2_cat_{_cc}")
+    
+    # ── Metric filters expander ───────────────────────────────────────────
+    _s2_num_cols = [
+        ("Spend",   "currency", "#7C3AED"),
+        ("Revenue", "currency", "#059669"),
+        ("ROI",     "roi",      "#059669"),
+    ]
+    _s2_pending: dict = {}
+    
+    with st.expander("⚙️ Metric Filters", expanded=False):
+        st.markdown('<p style="font-size:11px;color:var(--text-faint);margin-bottom:12px">'
+                    'Filter products by spend, revenue, or ROI — applies across all quadrants.'
+                    '</p>', unsafe_allow_html=True)
+    
+        for col_key, fmt, color in _s2_num_cols:
+            if col_key not in all_df_raw.columns:
+                continue
+            col_min = float(all_df_raw[col_key].min())
+            col_max = float(all_df_raw[col_key].max())
+            fmt_str = "%.4f" if fmt == "pct" else "%.2f" if fmt == "roi" else "%.0f"
+            step    = 0.01 if fmt == "roi" else 1.0
+    
+            st.markdown(f'<div style="font-size:11px;font-weight:600;color:{color};'
+                        f'margin:8px 0 4px">{col_key}</div>', unsafe_allow_html=True)
+            op_c, val_c = st.columns([2, 3])
+            with op_c:
+                op_label = st.selectbox(f"op_{col_key}", OP_OPTIONS,
+                                         label_visibility="collapsed",
+                                         key=f"s2_op_{col_key}")
+            op_sym = OP_MAP.get(op_label)
+    
+            if op_sym == "between":
+                mn_c, mx_c = st.columns(2)
+                with mn_c:
+                    mn = st.number_input(f"min_{col_key}", value=col_min,
+                                         step=step, format=fmt_str,
+                                         label_visibility="collapsed",
+                                         key=f"s2_min_{col_key}")
+                with mx_c:
+                    mx = st.number_input(f"max_{col_key}", value=col_max,
+                                         step=step, format=fmt_str,
+                                         label_visibility="collapsed",
+                                         key=f"s2_max_{col_key}")
+                _s2_pending[col_key] = ("between", mn, mx)
+            elif op_sym is not None:
+                with val_c:
+                    fv = st.number_input(f"val_{col_key}", value=col_min,
+                                         step=step, format=fmt_str,
+                                         label_visibility="collapsed",
+                                         key=f"s2_val_{col_key}")
+                _s2_pending[col_key] = (op_sym, fv)
+    
+        st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
+        ap_col, rs_col = st.columns([3, 1])
+        with ap_col:
+            s2_apply = st.button("✅  Apply Filters", type="primary",
+                                  key="s2_apply_filters", use_container_width=True)
+        with rs_col:
+            if st.button("↺ Reset", key="s2_reset_filters"):
+                for k in list(st.session_state.keys()):
+                    if k.startswith("s2_op_") or k.startswith("s2_val_") or \
+                       k.startswith("s2_min_") or k.startswith("s2_max_") or \
+                       k.startswith("s2_cat_") or k in ("s2_search_text",
+                       "s2_search_field", "s2_active_filters", "s2_search_snap",
+                       "s2_search_field_snap"):
+                        del st.session_state[k]
+                st.rerun()
+    
+        if s2_apply:
+            st.session_state["s2_active_filters"]      = dict(_s2_pending)
+            st.session_state["s2_search_snap"]         = s2_search_text
+            st.session_state["s2_search_field_snap"]   = s2_search_field
+            # snapshot category filters
+            for _cc in _cat_cols:
+                st.session_state[f"s2_cat_snap_{_cc}"] = \
+                    st.session_state.get(f"s2_cat_{_cc}", "All")
+            st.rerun()
+    
+    # ── Apply committed filters to all_df ────────────────────────────────
+    _s2_active   = st.session_state.get("s2_active_filters", {})
+    _s2_srch     = st.session_state.get("s2_search_snap", "").strip()
+    _s2_srch_fld = st.session_state.get("s2_search_field_snap", "Product Title")
+    
+    filt_all = all_df_raw.copy()
+    
+    # Search
+    if _s2_srch:
+        if _s2_srch_fld in filt_all.columns:
+            filt_all = filt_all[
+                filt_all[_s2_srch_fld].astype(str).str.lower()
+                .str.contains(_s2_srch.lower(), na=False)
+            ]
+    
+    # Category dropdowns
+    for _cc in _cat_cols:
+        _snap_val = st.session_state.get(f"s2_cat_snap_{_cc}", "All")
+        if _snap_val and _snap_val != "All" and _cc in filt_all.columns:
+            filt_all = filt_all[filt_all[_cc] == _snap_val]
+    
+    # Metric filters
+    for col_key, spec in _s2_active.items():
+        if col_key not in filt_all.columns:
+            continue
+        filt_all = filt_all[_apply_num_filter(filt_all[col_key], spec)]
+    
+    # ── Show active filter chips ──────────────────────────────────────────
+    _chips_html = ""
+    if _s2_srch:
+        _chips_html += (f'<span style="background:#F1F5F9;border:1px solid #7C3AED44;'
+                        f'border-radius:5px;padding:2px 8px;font-size:10px;color:#7C3AED;'
+                        f'font-weight:600;margin:2px">'
+                        f'{_s2_srch_fld} contains "{_s2_srch}"</span>')
+    for _cc in _cat_cols:
+        _sv = st.session_state.get(f"s2_cat_snap_{_cc}", "All")
+        if _sv and _sv != "All":
+            _chips_html += (f'<span style="background:#F1F5F9;border:1px solid #05966944;'
+                            f'border-radius:5px;padding:2px 8px;font-size:10px;'
+                            f'color:#059669;font-weight:600;margin:2px">'
+                            f'{_cc}: {_sv}</span>')
+    for col_key, spec in _s2_active.items():
+        _c = "#7C3AED"
+        desc = (f"between {spec[1]:.0f}–{spec[2]:.0f}" if spec[0] == "between"
+                else f"{spec[0]} {spec[1]:.2f}")
+        _chips_html += (f'<span style="background:#F1F5F9;border:1px solid {_c}44;'
+                        f'border-radius:5px;padding:2px 8px;font-size:10px;'
+                        f'color:{_c};font-weight:600;margin:2px">'
+                        f'{col_key} {desc}</span>')
+    
+    n_filt = len(filt_all)
+    n_all  = len(all_df_raw)
+    badge  = "#7C3AED" if n_filt == n_all else "#059669"
+#     st.markdown(
+#     f"""
+#     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:10px 0">
+#         <span style="background:{badge};color:white;border-radius:6px;
+#         padding:3px 10px;font-size:12px;font-weight:700">
+#             {n_filt:,} products
+#         </span>
+
+#         {'<span style="font-size:12px;color:#64748B">filtered from ' + str(n_all) + ' total</span>' if n_filt < n_all else ''}
+
+#         {_chips_html}
+#     </div>
+#     """,
+#     unsafe_allow_html=True,
+# )
+    
+    # ── Re-split filtered data into quadrants ─────────────────────────────
+    sp_cut = data["sp_cut"]
+    rv_cut = data["rv_cut"]
+    _cols  = [c for c in filt_all.columns
+              if c in ["Product ID","Google Item ID","Product Title",
+                       "Spend","Revenue","ROI",
+                       "Product type","Product vendor","Product collection"]]
+    
+    q1_filt = filt_all[(filt_all["Revenue"]>=rv_cut)&(filt_all["Spend"]< sp_cut)][_cols].sort_values("Revenue",ascending=False).reset_index(drop=True)
+    q2_filt = filt_all[(filt_all["Revenue"]>=rv_cut)&(filt_all["Spend"]>=sp_cut)][_cols].sort_values("Revenue",ascending=False).reset_index(drop=True)
+    q3_filt = filt_all[(filt_all["Revenue"]< rv_cut)&(filt_all["Spend"]>=sp_cut)][_cols].sort_values("Spend",  ascending=False).reset_index(drop=True)
+    q4_filt = filt_all[(filt_all["Revenue"]< rv_cut)&(filt_all["Spend"]< sp_cut)][_cols].sort_values("Revenue",ascending=False).reset_index(drop=True)
+
     divider()
     section_header("Quadrant Breakdown",
                    "Products split by spend and revenue vs average", "#2563EB")
 
     r1c1, r1c2 = st.columns(2)
     r2c1, r2c2 = st.columns(2)
-    with r1c1: quadrant_card("q1", data["q1"], "High Revenue · Low Spend — great ROI, underinvested")
-    with r1c2: quadrant_card("q2", data["q2"], "High Revenue · High Spend — strong performers")
-    with r2c1: quadrant_card("q4", data["q4"], "Low Revenue · Low Spend — assess or drop")
-    with r2c2: quadrant_card("q3", data["q3"], "Low Revenue · High Spend — budget drain")
+    with r1c1: quadrant_card("q1", q1_filt, "High Revenue · Low Spend — great ROI, underinvested")
+    with r1c2: quadrant_card("q2", q2_filt, "High Revenue · High Spend — strong performers")
+    with r2c1: quadrant_card("q4", q4_filt, "Low Revenue · Low Spend — assess or drop")
+    with r2c2: quadrant_card("q3", q3_filt, "Low Revenue · High Spend — budget drain")
 
     divider()
     st.markdown(

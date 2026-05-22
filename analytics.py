@@ -387,7 +387,14 @@ def run_discount_analysis(
             lshr   = g[(g["Spend"] <  sp_cut) & (g["Revenue"] >  rv_cut)].copy()
             for frame in [hslr, lshr]:
                 frame["Product Title"] = frame["Product ID"].map(title_map).fillna("Unknown")
-            cols = ["Product ID", "Product Title", "Spend", "Revenue", "ROI"]
+            _extra_cols = []
+            if "Google Item ID" in merged.columns and merged["Google Item ID"].astype(bool).any():
+                _extra_cols.append("Google Item ID")
+            for _tc in ["Product type", "Product vendor", "Product collection"]:
+                if _tc in merged.columns:
+                    _extra_cols.append(_tc)
+            
+            cols = ["Product ID", "Product Title", "Spend", "Revenue", "ROI"] + _extra_cols
             insights[(month, cat)] = {
                 "hslr": hslr.sort_values("Spend",   ascending=False)[cols].reset_index(drop=True),
                 "lshr": lshr.sort_values("Revenue", ascending=False)[cols].reset_index(drop=True),
