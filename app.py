@@ -153,9 +153,6 @@ _OV_COLS = {
     "CPM":                {"label": "CPM (₹)",         "fmt": "currency", "source": "Meta",    "color": "#2563EB", "bg": "#EFF6FF"},
     "Variant Title":      {"label": "Variant Title",   "fmt": "text",     "source": "Shopify", "color": "#059669", "bg": "#ECFDF5"},
     "Month":              {"label": "Month",           "fmt": "text",     "source": "All",     "color": "#64748B", "bg": "#F8FAFC"},
-    "Product type":       {"label": "Product Type",    "fmt": "text",     "source": "Shopify", "color": "#059669", "bg": "#ECFDF5"},
-    "Product vendor":     {"label": "Product Vendor",  "fmt": "text",     "source": "Shopify", "color": "#059669", "bg": "#ECFDF5"},
-    "Product collection": {"label": "Product Collection","fmt": "text",   "source": "Shopify", "color": "#059669", "bg": "#ECFDF5"},
 }
 
 
@@ -250,7 +247,7 @@ def render_overall_view():
 
     with col2:
         upload_card("#059669", "#ECFDF5", "② Shopify",
-                "Product Variant ID · Product Title · Month · Product type · Product vendor	· Product collection· Net Sales · Net Items Sold")
+            "Product Variant ID · Product Title · Month · Total Sales · Net Items Sold")
         shopify_file = st.file_uploader("Shopify CSV", type=["csv","xlsx"],
                                          key="ov_shopify_upload", label_visibility="collapsed")
         _persist_upload(shopify_file, "ov_shopify_bytes", "ov_shopify_name")
@@ -395,9 +392,6 @@ def render_overall_view():
         if "Variant Title" in df.columns:
             agg_dict["Variant Title"] = "first"
         # Preserve Shopify text attributes
-        for _txt_col in ["Product type", "Product vendor", "Product collection"]:
-            if _txt_col in df.columns:
-                agg_dict[_txt_col] = "first"
         group_keys = [k for k in ["Product ID","Product Title"] if k in df.columns]
         work_df = df.groupby(group_keys, as_index=False).agg(agg_dict) if agg_dict \
                   else df.groupby(group_keys, as_index=False).first()
@@ -448,12 +442,9 @@ def render_overall_view():
     # ── Smart Search: field dropdown + search bar ─────────────────────
     # Build list of searchable fields — only include columns that exist in work_df
     _SEARCH_FIELD_MAP = {
-        "Product ID":         "Product ID",
-        "Product Title":      "Product Title",
-        "Variant Title":      "Variant Title",
-        "Product Type":       "Product type",       # ← lowercase 't' matches Shopify output
-        "Product Vendor":     "Product vendor",     # ← lowercase 'v'
-        "Product Collection": "Product collection", # ← lowercase 'c'
+    "Product ID":    "Product ID",
+    "Product Title": "Product Title",
+    "Variant Title": "Variant Title",
     }
     # Only show options where the underlying column exists in work_df
     _available_search_options = [
@@ -882,9 +873,9 @@ def render_overall_view():
                 export_cols.insert(_pid_idx, "Google Item ID")
         
         # Always append Shopify text cols if present
-        for _extra in ["Product type", "Product vendor", "Product collection"]:
-            if _extra in fdf.columns and _extra not in export_cols:
-                export_cols.append(_extra)
+        if "Google Item ID" in fdf.columns and "Google Item ID" not in export_cols:
+            _pid_idx = export_cols.index("Product ID") + 1 if "Product ID" in export_cols else 0
+            export_cols.insert(_pid_idx, "Google Item ID")
 
         # Build filter summary rows to prepend above data
         filter_lines = []
@@ -1052,7 +1043,7 @@ def render_discount_view():
 
     with col2:
         upload_card("#059669", "#ECFDF5", "② Shopify",
-                "Cols: Product Variant ID · Product Title · Month · Net Sales · Net Items Sold")
+                "Cols: Product Variant ID · Product Title · Month · Total Sales · Net Items Sold")
         shopify_file = st.file_uploader("Shopify CSV", type=["csv","xlsx"],
                                          key="s1_shop", label_visibility="collapsed")
         _persist_upload(shopify_file, "s1_shopify_bytes", "s1_shopify_name")
@@ -1522,23 +1513,7 @@ def render_quadrant_view():
                                         label_visibility="collapsed", key="s2_search_text")
     
     # ── Category / Type dropdown ──────────────────────────────────────────
-    _cat_cols = [c for c in ["Product type", "Product vendor", "Product collection"]
-                 if c in all_df_raw.columns]
-    if _cat_cols:
-        cat_filter_cols = st.columns(len(_cat_cols))
-        for _ci, _cc in enumerate(_cat_cols):
-            with cat_filter_cols[_ci]:
-                _uniq = ["All"] + sorted(
-                all_df_raw[_cc]
-                .dropna()
-                .astype(str)
-                .unique()
-                .tolist()
-                )
-                st.markdown(f'<div style="font-size:11px;font-weight:600;color:#64748B;'
-                            f'margin-bottom:4px">{_cc}</div>', unsafe_allow_html=True)
-                st.selectbox(_cc, _uniq, label_visibility="collapsed",
-                             key=f"s2_cat_{_cc}")
+    _cat_cols = []
     
     # ── Metric filters expander ───────────────────────────────────────────
     _s2_num_cols = [
@@ -1601,9 +1576,8 @@ def render_quadrant_view():
                 for k in list(st.session_state.keys()):
                     if k.startswith("s2_op_") or k.startswith("s2_val_") or \
                        k.startswith("s2_min_") or k.startswith("s2_max_") or \
-                       k.startswith("s2_cat_") or k in ("s2_search_text",
-                       "s2_search_field", "s2_active_filters", "s2_search_snap",
-                       "s2_search_field_snap"):
+                       k in ("s2_search_text", "s2_search_field", "s2_active_filters",
+                             "s2_search_snap", "s2_search_field_snap"):
                         del st.session_state[k]
                 st.rerun()
     
@@ -1611,10 +1585,6 @@ def render_quadrant_view():
             st.session_state["s2_active_filters"]      = dict(_s2_pending)
             st.session_state["s2_search_snap"]         = s2_search_text
             st.session_state["s2_search_field_snap"]   = s2_search_field
-            # snapshot category filters
-            for _cc in _cat_cols:
-                st.session_state[f"s2_cat_snap_{_cc}"] = \
-                    st.session_state.get(f"s2_cat_{_cc}", "All")
             st.rerun()
     
     # ── Apply committed filters to all_df ────────────────────────────────
@@ -1632,12 +1602,6 @@ def render_quadrant_view():
                 .str.contains(_s2_srch.lower(), na=False)
             ]
     
-    # Category dropdowns
-    for _cc in _cat_cols:
-        _snap_val = st.session_state.get(f"s2_cat_snap_{_cc}", "All")
-        if _snap_val and _snap_val != "All" and _cc in filt_all.columns:
-            filt_all = filt_all[filt_all[_cc] == _snap_val]
-    
     # Metric filters
     for col_key, spec in _s2_active.items():
         if col_key not in filt_all.columns:
@@ -1651,13 +1615,6 @@ def render_quadrant_view():
                         f'border-radius:5px;padding:2px 8px;font-size:10px;color:#7C3AED;'
                         f'font-weight:600;margin:2px">'
                         f'{_s2_srch_fld} contains "{_s2_srch}"</span>')
-    for _cc in _cat_cols:
-        _sv = st.session_state.get(f"s2_cat_snap_{_cc}", "All")
-        if _sv and _sv != "All":
-            _chips_html += (f'<span style="background:#F1F5F9;border:1px solid #05966944;'
-                            f'border-radius:5px;padding:2px 8px;font-size:10px;'
-                            f'color:#059669;font-weight:600;margin:2px">'
-                            f'{_cc}: {_sv}</span>')
     for col_key, spec in _s2_active.items():
         _c = "#7C3AED"
         desc = (f"between {spec[1]:.0f}–{spec[2]:.0f}" if spec[0] == "between"
@@ -1689,10 +1646,9 @@ def render_quadrant_view():
     # ── Re-split filtered data into quadrants ─────────────────────────────
     sp_cut = data["sp_cut"]
     rv_cut = data["rv_cut"]
-    _cols  = [c for c in filt_all.columns
-              if c in ["Product ID","Google Item ID","Product Title",
-                       "Spend","Revenue","ROI",
-                       "Product type","Product vendor","Product collection"]]
+    _cols = [c for c in filt_all.columns
+         if c in ["Product ID", "Google Item ID", "Product Title",
+                  "Spend", "Revenue", "ROI"]]
     
     q1_filt = filt_all[(filt_all["Revenue"]>=rv_cut)&(filt_all["Spend"]< sp_cut)][_cols].sort_values("Revenue",ascending=False).reset_index(drop=True)
     q2_filt = filt_all[(filt_all["Revenue"]>=rv_cut)&(filt_all["Spend"]>=sp_cut)][_cols].sort_values("Revenue",ascending=False).reset_index(drop=True)

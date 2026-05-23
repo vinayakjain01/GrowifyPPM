@@ -95,7 +95,7 @@ def run_overall_view(
     meta_title_col = find_col(meta,    "product title", "title")
     meta_month_col = find_col(meta,    "month")
 
-    shop_rev_col   = find_col(shopify, "net sales", "sales", "revenue")
+    shop_rev_col   = find_col(shopify, "total sales", "sales", "revenue")
     shop_sold_col  = find_col(shopify, "net items sold", "items sold", "sold", "quantity")
     shop_title_col = find_col(shopify, "product title", "title")
     shop_month_col = find_col(shopify, "month")
@@ -104,7 +104,7 @@ def run_overall_view(
     if not meta_spend_col:
         raise ValueError("Meta CSV: cannot detect 'Amount spent' column.")
     if not shop_rev_col:
-        raise ValueError("Shopify CSV: cannot detect 'Net sales' column.")
+        raise ValueError("Shopify CSV: cannot detect 'Total sales' column.")
 
     if has_google:
         goog_cost_col  = find_col(google, "cost", "spend")
@@ -257,19 +257,11 @@ def run_overall_view(
 
     # Variant title (Shopify only — may not be per-month, use overall map)
     merged["Variant Title"] = merged["Product ID"].map(variant_map).fillna("")
-
-    for _tc in ["Product type", "Product vendor", "Product collection"]:
-        if _tc in merged.columns:
-            pass  # already there from the merge
-        elif _tc in shopify.columns:
-            # fallback: map from shopify directly
-            _tc_map = shopify.drop_duplicates("_pid").set_index("_pid")[_tc].to_dict()
-            merged[_tc] = merged["Product ID"].map(_tc_map).fillna("")
     
-        total_spend = merged["Total Spend"]
-        merged["ROI"] = (
-            merged["Shopify Revenue"] / total_spend.replace(0, float("nan"))
-        ).fillna(0).round(4)
+    total_spend = merged["Total Spend"]
+    merged["ROI"] = (
+        merged["Shopify Revenue"] / total_spend.replace(0, float("nan"))
+    ).fillna(0).round(4)
 
     # ── Final column order ───────────────────────────────────────────
     keep = ["Product ID", "Google Item ID", "Product Title", "Variant Title"]
@@ -280,7 +272,6 @@ def run_overall_view(
         "Shopify Revenue", "Net Items Sold",
         "Landing Page Views", "Conversions",
         "CTR", "CPM", "ROI",
-        "Product type", "Product vendor", "Product collection",  # ← moved here, no duplicate
     ]
 
     out = merged[[c for c in keep if c in merged.columns]].copy()
@@ -308,8 +299,8 @@ def run_discount_analysis(
     discount = discount.copy()
 
     meta_spend_col  = find_col(meta,    "amount spent", "spend")
-    shopify_rev_col = find_col(shopify, "net sales", "sales", "revenue")
-    meta_title_col  = find_col(meta,    "product title", "title")
+    shopify_rev_col = find_col(shopify, "total sales", "sales", "revenue")
+    meta_title_col  = find_col(meta,    "prod----------------------------------uct title", "title")
     shop_title_col  = find_col(shopify, "product title", "title")
 
     if not meta_spend_col:
@@ -387,13 +378,10 @@ def run_discount_analysis(
             lshr   = g[(g["Spend"] <  sp_cut) & (g["Revenue"] >  rv_cut)].copy()
             for frame in [hslr, lshr]:
                 frame["Product Title"] = frame["Product ID"].map(title_map).fillna("Unknown")
+            # WITH
             _extra_cols = []
             if "Google Item ID" in merged.columns and merged["Google Item ID"].astype(bool).any():
                 _extra_cols.append("Google Item ID")
-            for _tc in ["Product type", "Product vendor", "Product collection"]:
-                if _tc in merged.columns:
-                    _extra_cols.append(_tc)
-            
             cols = ["Product ID", "Product Title", "Spend", "Revenue", "ROI"] + _extra_cols
             insights[(month, cat)] = {
                 "hslr": hslr.sort_values("Spend",   ascending=False)[cols].reset_index(drop=True),
@@ -437,7 +425,7 @@ def run_product_analysis(
     shopify = shopify.copy()
 
     meta_spend_col  = find_col(meta,    "amount spent", "spend")
-    shopify_rev_col = find_col(shopify, "net sales", "sales", "revenue")
+    shopify_rev_col = find_col(shopify, "total sales", "sales", "revenue")
     meta_title_col  = find_col(meta,    "product title", "title")
     shop_title_col  = find_col(shopify, "product title", "title")
 
@@ -475,10 +463,6 @@ def run_product_analysis(
     _shop_agg_m: Dict[str, str] = {}
     if "_rev" in shopify.columns:
         _shop_agg_m["_rev"] = "sum"
-    for _tc in ["Product type", "Product vendor", "Product collection"]:
-        if _tc in shopify.columns:
-            _shop_agg_m[_tc] = "first"
-
     _shop_agg = dict(_shop_agg_m)
 
     # ── Monthly aggregations ─────────────────────────────────────────
